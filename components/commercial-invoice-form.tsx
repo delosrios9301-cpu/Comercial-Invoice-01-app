@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileDown } from "lucide-react"
 
+interface SampleRow {
+  type: string
+  tubes: string
+  totalQty: string
+}
+
 export default function CommercialInvoiceForm() {
   const [formData, setFormData] = useState({
     date: "26 DIC 2025",
@@ -32,7 +38,17 @@ USA`,
     totalvalue: "5",
     shippername: "Miguel De Los Ríos",
     signdate: "26 DIC 2025",
+    ambientChecked: false,
+    dryIceChecked: true,
   })
+
+  const [samples, setSamples] = useState<SampleRow[]>([
+    { type: "HUMAN BLOOD", tubes: "x11", totalQty: "5.00" },
+    { type: "HUMAN SWAB", tubes: "0", totalQty: "0" },
+    { type: "HUMAN PBMC", tubes: "0", totalQty: "0" },
+    { type: "HUMAN PLASMA", tubes: "0", totalQty: "0" },
+    { type: "HUMAN SERUM", tubes: "0", totalQty: "0" },
+  ])
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -43,6 +59,23 @@ USA`,
     })
   }
 
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.checked,
+    })
+  }
+
+  const handleSampleChange = (
+    index: number,
+    field: keyof SampleRow,
+    value: string
+  ) => {
+    const newSamples = [...samples]
+    newSamples[index][field] = value
+    setSamples(newSamples)
+  }
+
   const generatePDF = () => {
     const doc = new jsPDF({
       orientation: "portrait",
@@ -50,84 +83,163 @@ USA`,
       format: "letter",
     })
 
+    const pageWidth = 215.9
+    const pageHeight = 279.4
+    const margin = 10
+    const contentWidth = pageWidth - margin * 2
+
     const get = (field: keyof typeof formData) => formData[field] || ""
 
     doc.setFont("courier", "normal")
     doc.setFontSize(8)
     doc.setLineWidth(0.2)
 
-    doc.text("Date of Exportation:", 10, 12)
-    doc.text("Air Way Bill No:", 110, 12)
+    // Date and AWB labels
+    doc.text("Date of Exportation:", margin, 12)
+    doc.text("Air Way Bill No:", margin + contentWidth / 2, 12)
 
-    doc.text(get("date"), 10, 18)
-    doc.text(get("awb"), 110, 18)
+    // Date and AWB values
+    doc.text(String(get("date")), margin, 18)
+    doc.text(String(get("awb")), margin + contentWidth / 2, 18)
 
-    doc.rect(10, 22, 95, 42)
-    doc.rect(105, 22, 95, 42)
+    // Shipper and Consignee boxes
+    const boxTop = 22
+    const boxHeight = 42
+    const halfWidth = contentWidth / 2 - 2
+
+    doc.rect(margin, boxTop, halfWidth, boxHeight)
+    doc.rect(margin + halfWidth + 4, boxTop, halfWidth, boxHeight)
 
     doc.setFont("courier", "bold")
-    doc.text("Shipper/Exporter: (Complete name, address, country)", 12, 27)
-    doc.text("CONSIGNEE:", 107, 27)
+    doc.setFontSize(7)
+    doc.text("Shipper/Exporter: (Complete name, address, country)", margin + 2, boxTop + 5)
+    doc.text("CONSIGNEE:", margin + halfWidth + 6, boxTop + 5)
 
     doc.setFont("courier", "normal")
     doc.setFontSize(7)
 
-    doc.text(doc.splitTextToSize(get("shipper"), 88), 12, 33)
-    doc.text(doc.splitTextToSize(get("consignee"), 88), 107, 33)
+    const shipperLines = doc.splitTextToSize(String(get("shipper")), halfWidth - 4)
+    const consigneeLines = doc.splitTextToSize(String(get("consignee")), halfWidth - 4)
 
-    doc.rect(10, 64, 95, 12)
-    doc.rect(105, 64, 95, 12)
+    doc.text(shipperLines, margin + 2, boxTop + 11)
+    doc.text(consigneeLines, margin + halfWidth + 6, boxTop + 11)
+
+    // Destination and Protocol boxes
+    const destTop = boxTop + boxHeight
+    const destHeight = 12
+
+    doc.rect(margin, destTop, halfWidth, destHeight)
+    doc.rect(margin + halfWidth + 4, destTop, halfWidth, destHeight)
 
     doc.setFont("courier", "bold")
-    doc.text("COUNTRY OF FINAL DESTINATION:", 12, 69)
-    doc.text("EXPORT REFERENCES/PROTOCOL:", 107, 69)
+    doc.text("COUNTRY OF FINAL DESTINATION:", margin + 2, destTop + 5)
+    doc.text("EXPORT REFERENCES/PROTOCOL:", margin + halfWidth + 6, destTop + 5)
 
     doc.setFont("courier", "normal")
-    doc.text(get("destination"), 12, 74)
-    doc.text(get("protocol"), 107, 74)
+    doc.text(String(get("destination")), margin + 2, destTop + 10)
+    doc.text(String(get("protocol")), margin + halfWidth + 6, destTop + 10)
 
-    doc.rect(10, 76, 190, 108)
+    // Main description table
+    const tableTop = destTop + destHeight
+    const tableHeight = 108
 
-    doc.line(22, 76, 22, 184)
-    doc.line(40, 76, 40, 184)
-    doc.line(135, 76, 135, 184)
-    doc.line(155, 76, 155, 184)
-    doc.line(170, 76, 170, 184)
-    doc.line(185, 76, 185, 184)
+    doc.rect(margin, tableTop, contentWidth, tableHeight)
 
-    doc.line(10, 88, 200, 88)
+    // Column positions
+    const col1 = margin
+    const col2 = margin + 12
+    const col3 = margin + 28
+    const col4 = margin + 125
+    const col5 = margin + 145
+    const col6 = margin + 160
+    const col7 = margin + 178
 
+    // Vertical lines
+    doc.line(col2, tableTop, col2, tableTop + tableHeight)
+    doc.line(col3, tableTop, col3, tableTop + tableHeight)
+    doc.line(col4, tableTop, col4, tableTop + tableHeight)
+    doc.line(col5, tableTop, col5, tableTop + tableHeight)
+    doc.line(col6, tableTop, col6, tableTop + tableHeight)
+    doc.line(col7, tableTop, col7, tableTop + tableHeight)
+
+    // Header row line
+    const headerRowHeight = 12
+    doc.line(margin, tableTop + headerRowHeight, margin + contentWidth, tableTop + headerRowHeight)
+
+    // Header texts
     doc.setFont("courier", "bold")
+    doc.setFontSize(6)
+
+    doc.text("MARKS & # OF", col1 + 1, tableTop + 4)
+    doc.text("Numbers", col1 + 1, tableTop + 8)
+    doc.text("PAKGS", col2 + 2, tableTop + 6)
+    doc.text("COMPLETE DESCRIPTION OF GOODS", col3 + 20, tableTop + 6)
+    doc.text("WEIGHT", col4 + 3, tableTop + 4)
+    doc.text("LBS", col4 + 5, tableTop + 8)
+    doc.text("QTY", col5 + 3, tableTop + 6)
+    doc.text("UNIT VALUE", col6 + 1, tableTop + 4)
+    doc.text("(USD)", col6 + 4, tableTop + 8)
+    doc.text("TOTAL VALUE", col7 + 1, tableTop + 4)
+    doc.text("(USD)", col7 + 4, tableTop + 8)
+
+    // Content area
+    doc.setFont("courier", "normal")
     doc.setFontSize(7)
 
-    doc.text("MARKS & # OF", 11, 81)
-    doc.text("Numbers", 12, 85)
-    doc.text("PAKGS", 25, 84)
-    doc.text("COMPLETE DESCRIPTION OF GOODS", 50, 84)
-    doc.text("WEIGHT", 138, 81)
-    doc.text("LBS", 141, 85)
-    doc.text("QTY", 159, 84)
-    doc.text("UNIT VALUE", 171, 81)
-    doc.text("(USD)", 173, 85)
-    doc.text("TOTAL VALUE", 185, 81)
-    doc.text("(USD)", 188, 85)
+    const contentY = tableTop + headerRowHeight + 6
 
+    // Marks and Packages
+    doc.text(String(get("marks")), col1 + 3, contentY)
+    doc.text(String(get("packages")), col2 + 3, contentY)
+
+    // Description content
+    let descY = contentY
+
+    // Shipment type line with checkboxes
+    doc.setFont("courier", "bold")
+    doc.text("URGENT LABORATORY SPECIMEN SHIPMENT", col3 + 2, descY)
+    descY += 5
+
+    // Temperature indicators
     doc.setFont("courier", "normal")
-    doc.setFontSize(8)
+    const ambientX = col3 + 2
+    const dryIceX = col3 + 35
 
-    doc.text(get("marks"), 13, 96)
-    doc.text(get("packages"), 28, 96)
+    doc.text("Ambient", ambientX, descY)
+    doc.rect(ambientX + 18, descY - 3, 4, 4)
+    if (formData.ambientChecked) {
+      doc.text("X", ambientX + 19, descY)
+    }
 
-    const descriptionLines = [
-      "URGENT LABORATORY SPECIMEN SHIPMENT",
-      "Ambient DRY ICE X",
-      "",
-      "HUMAN BLOOD ml",
-      "HUMAN SWAB ml",
-      "HUMAN PBMC ml",
-      "HUMAN PLASMA ml",
-      "HUMAN SERUM ml",
-      "",
+    doc.text("DRY ICE", dryIceX, descY)
+    doc.rect(dryIceX + 18, descY - 3, 4, 4)
+    if (formData.dryIceChecked) {
+      doc.text("X", dryIceX + 19, descY)
+    }
+
+    descY += 6
+
+    // Sample types table header
+    doc.setFontSize(6)
+    doc.text("Sample Type", col3 + 2, descY)
+    doc.text("Qty of tubes", col3 + 45, descY)
+    doc.text("Total Qty in ML/gm", col3 + 70, descY)
+
+    descY += 4
+
+    // Sample rows
+    samples.forEach((sample) => {
+      doc.text(sample.type, col3 + 2, descY)
+      doc.text(sample.tubes, col3 + 50, descY)
+      doc.text(sample.totalQty, col3 + 78, descY)
+      descY += 4
+    })
+
+    descY += 4
+
+    // Disclaimer text
+    doc.setFontSize(6)
+    const disclaimerLines = [
       "This substances listed are of human origin containing no animal material and not",
       "of tissue culture origin. Human material that was neither inoculated with, nor exposed to",
       "infectious agents of agricultural concern, including zoonotic agents. No further processing.",
@@ -135,51 +247,64 @@ USA`,
       "Please expedite customs clearance of this package. Not for resale.",
     ]
 
-    doc.text(descriptionLines, 43, 96)
+    disclaimerLines.forEach((line) => {
+      doc.text(line, col3 + 2, descY)
+      descY += 3.5
+    })
 
-    doc.text(get("weight"), 140, 96)
-    doc.text(get("qty"), 160, 96)
-    doc.text(get("unitvalue"), 173, 96)
-    doc.text(get("totalvalue"), 188, 96)
+    // Values column
+    doc.setFontSize(7)
+    doc.text(String(get("weight")), col4 + 3, contentY)
+    doc.text(String(get("qty")), col5 + 3, contentY)
+    doc.text(String(get("unitvalue")), col6 + 3, contentY)
+    doc.text(String(get("totalvalue")), col7 + 3, contentY)
 
-    doc.line(10, 164, 200, 164)
+    // Totals row
+    const totalsTop = tableTop + tableHeight - 20
+    doc.line(margin, totalsTop, margin + contentWidth, totalsTop)
 
     doc.setFont("courier", "bold")
-    doc.text("Totals:", 12, 170)
-    doc.text("# OF PACKAGES", 42, 170)
-    doc.text("WEIGHT LBS", 92, 170)
-    doc.text("QTY", 132, 170)
-    doc.text("UNIT VALUE (USD)", 148, 170)
-    doc.text("TOTAL VALUE (USD)", 177, 170)
+    doc.setFontSize(6)
+
+    doc.text("Totals:", col1 + 2, totalsTop + 5)
+    doc.text("# OF PACKAGES", col3 + 2, totalsTop + 5)
+    doc.text("WEIGHT LBS", col3 + 35, totalsTop + 5)
+    doc.text("QTY", col4 + 3, totalsTop + 5)
+    doc.text("UNIT VALUE (USD)", col5 + 1, totalsTop + 5)
+    doc.text("TOTAL VALUE (USD)", col7 + 1, totalsTop + 5)
 
     doc.setFont("courier", "normal")
+    doc.text(String(get("packages")), col3 + 20, totalsTop + 12)
+    doc.text(String(get("weight")), col3 + 50, totalsTop + 12)
+    doc.text(String(get("qty")), col4 + 5, totalsTop + 12)
+    doc.text(String(get("unitvalue")), col5 + 8, totalsTop + 12)
+    doc.text(String(get("totalvalue")), col7 + 8, totalsTop + 12)
 
-    doc.text(get("packages"), 65, 176)
-    doc.text(get("weight"), 102, 176)
-    doc.text(get("qty"), 135, 176)
-    doc.text(get("unitvalue"), 158, 176)
-    doc.text(get("totalvalue"), 185, 176)
+    // Declaration box
+    const declTop = tableTop + tableHeight
+    const declHeight = 28
 
-    doc.rect(10, 184, 190, 28)
+    doc.rect(margin, declTop, contentWidth, declHeight)
 
     doc.setFont("courier", "bold")
+    doc.setFontSize(7)
     doc.text(
       "I DECLARE THAT ALL INFORMATION IN THIS INVOICE IS TRUE AND CORRECT",
-      18,
-      193
+      margin + 15,
+      declTop + 8
     )
 
     doc.setFont("courier", "normal")
-    doc.text("Shipper's signature/ Exporter Name and title", 12, 204)
-    doc.text("Date", 165, 204)
+    doc.setFontSize(6)
+    doc.text("Shipper's signature/ Exporter", margin + 2, declTop + 15)
+    doc.text("Date", margin + 50, declTop + 15)
+    doc.text("Name and title", margin + 75, declTop + 15)
 
-    doc.text(get("shippername"), 12, 210)
-    doc.text(get("signdate"), 165, 210)
+    doc.setFontSize(8)
+    doc.text(String(get("shippername")), margin + 2, declTop + 22)
+    doc.text(String(get("signdate")), margin + 50, declTop + 22)
 
-    doc.setFontSize(7)
-    doc.text("Sample Type Qty of tubes Total Qty in ML/gm", 128, 220)
-
-    doc.save("Commercial_Invoice_Exact_Format.pdf")
+    doc.save("Commercial_Invoice_mRNA-1365-P101.pdf")
   }
 
   return (
@@ -265,6 +390,74 @@ USA`,
                 onChange={handleChange}
                 placeholder="PR:MDRN0067 MRNA-1365-P101 SITE#PAN03"
               />
+            </div>
+          </div>
+
+          {/* Temperature Type */}
+          <div className="space-y-2">
+            <Label>Shipment Temperature</Label>
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="ambientChecked"
+                  checked={formData.ambientChecked}
+                  onChange={handleCheckboxChange}
+                  className="h-4 w-4"
+                />
+                Ambient
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="dryIceChecked"
+                  checked={formData.dryIceChecked}
+                  onChange={handleCheckboxChange}
+                  className="h-4 w-4"
+                />
+                DRY ICE
+              </label>
+            </div>
+          </div>
+
+          {/* Sample Types Table */}
+          <div className="space-y-2">
+            <Label>Sample Types</Label>
+            <div className="rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="p-2 text-left font-medium">Sample Type</th>
+                    <th className="p-2 text-left font-medium">Qty of Tubes</th>
+                    <th className="p-2 text-left font-medium">Total Qty (ML/gm)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {samples.map((sample, index) => (
+                    <tr key={sample.type} className="border-t">
+                      <td className="p-2">{sample.type}</td>
+                      <td className="p-2">
+                        <Input
+                          value={sample.tubes}
+                          onChange={(e) =>
+                            handleSampleChange(index, "tubes", e.target.value)
+                          }
+                          className="h-8"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <Input
+                          value={sample.totalQty}
+                          onChange={(e) =>
+                            handleSampleChange(index, "totalQty", e.target.value)
+                          }
+                          className="h-8"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -363,7 +556,7 @@ USA`,
           {/* Download Button */}
           <Button onClick={generatePDF} size="lg" className="w-full md:w-auto">
             <FileDown className="mr-2 h-5 w-5" />
-            Generar PDF Exacto
+            Generar PDF
           </Button>
         </CardContent>
       </Card>
