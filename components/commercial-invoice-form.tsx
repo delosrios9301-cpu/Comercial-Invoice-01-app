@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileDown } from "lucide-react"
+import { FileDown, Plus, Trash2 } from "lucide-react"
+
+const FIXED_TOTAL_VALUE = 5
 
 interface SampleRow {
-  type: string
-  tubes: string
-  totalQty: string
+  description: string
+  qty: number
 }
 
 export default function CommercialInvoiceForm() {
@@ -33,9 +34,6 @@ USA`,
     marks: "1",
     packages: "20",
     weight: "5.00",
-    qty: "1",
-    unitvalue: "5",
-    totalvalue: "5",
     shippername: "Miguel De Los Ríos",
     signdate: "26 DIC 2025",
     ambientChecked: false,
@@ -43,12 +41,26 @@ USA`,
   })
 
   const [samples, setSamples] = useState<SampleRow[]>([
-    { type: "HUMAN BLOOD", tubes: "x11", totalQty: "5.00" },
-    { type: "HUMAN SWAB", tubes: "0", totalQty: "0" },
-    { type: "HUMAN PBMC", tubes: "0", totalQty: "0" },
-    { type: "HUMAN PLASMA", tubes: "0", totalQty: "0" },
-    { type: "HUMAN SERUM", tubes: "0", totalQty: "0" },
+    { description: "HUMAN BLOOD", qty: 11 },
+    { description: "HUMAN NASAL SWAB", qty: 0 },
+    { description: "HUMAN PBMC", qty: 0 },
+    { description: "HUMAN PLASMA", qty: 0 },
+    { description: "HUMAN SERUM", qty: 0 },
   ])
+
+  // Calculate ML/gm for a single row
+  const calculateMl = (sample: SampleRow): number => {
+    const name = sample.description.toLowerCase()
+    if (name.includes("nasal")) {
+      return sample.qty * 3
+    }
+    return sample.qty
+  }
+
+  // Calculate totals
+  const totalQty = samples.reduce((acc, item) => acc + Number(item.qty), 0)
+  const totalMl = samples.reduce((acc, item) => acc + calculateMl(item), 0)
+  const unitValue = totalQty > 0 ? FIXED_TOTAL_VALUE / totalQty : 0
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -66,14 +78,24 @@ USA`,
     })
   }
 
-  const handleSampleChange = (
-    index: number,
-    field: keyof SampleRow,
-    value: string
-  ) => {
+  const updateSample = (index: number, field: keyof SampleRow, value: string | number) => {
     const newSamples = [...samples]
-    newSamples[index][field] = value
+    if (field === "qty") {
+      newSamples[index][field] = Number(value)
+    } else {
+      newSamples[index][field] = String(value)
+    }
     setSamples(newSamples)
+  }
+
+  const addSample = () => {
+    setSamples([...samples, { description: "NEW SAMPLE", qty: 0 }])
+  }
+
+  const removeSample = (index: number) => {
+    if (samples.length > 1) {
+      setSamples(samples.filter((_, i) => i !== index))
+    }
   }
 
   const generatePDF = () => {
@@ -84,7 +106,6 @@ USA`,
     })
 
     const pageWidth = 215.9
-    const pageHeight = 279.4
     const margin = 10
     const contentWidth = pageWidth - margin * 2
 
@@ -220,18 +241,21 @@ USA`,
     descY += 6
 
     // Sample types table header
+    doc.setFont("courier", "bold")
     doc.setFontSize(6)
-    doc.text("Sample Type", col3 + 2, descY)
-    doc.text("Qty of tubes", col3 + 45, descY)
-    doc.text("Total Qty in ML/gm", col3 + 70, descY)
+    doc.text("SAMPLE DESCRIPTION", col3 + 2, descY)
+    doc.text("QTY", col3 + 55, descY)
+    doc.text("TOTAL QTY in ML/gm", col3 + 70, descY)
 
     descY += 4
 
     // Sample rows
+    doc.setFont("courier", "normal")
     samples.forEach((sample) => {
-      doc.text(sample.type, col3 + 2, descY)
-      doc.text(sample.tubes, col3 + 50, descY)
-      doc.text(sample.totalQty, col3 + 78, descY)
+      const mlValue = calculateMl(sample)
+      doc.text(sample.description, col3 + 2, descY)
+      doc.text(String(sample.qty), col3 + 57, descY)
+      doc.text(String(mlValue), col3 + 78, descY)
       descY += 4
     })
 
@@ -252,12 +276,12 @@ USA`,
       descY += 3.5
     })
 
-    // Values column
+    // Values column - only show weight, other values shown in totals
     doc.setFontSize(7)
     doc.text(String(get("weight")), col4 + 3, contentY)
-    doc.text(String(get("qty")), col5 + 3, contentY)
-    doc.text(String(get("unitvalue")), col6 + 3, contentY)
-    doc.text(String(get("totalvalue")), col7 + 3, contentY)
+    doc.text(String(totalQty), col5 + 3, contentY)
+    doc.text(unitValue.toFixed(4), col6 + 3, contentY)
+    doc.text(FIXED_TOTAL_VALUE.toFixed(2), col7 + 3, contentY)
 
     // Totals row
     const totalsTop = tableTop + tableHeight - 20
@@ -267,18 +291,18 @@ USA`,
     doc.setFontSize(6)
 
     doc.text("Totals:", col1 + 2, totalsTop + 5)
-    doc.text("# OF PACKAGES", col3 + 2, totalsTop + 5)
-    doc.text("WEIGHT LBS", col3 + 35, totalsTop + 5)
-    doc.text("QTY", col4 + 3, totalsTop + 5)
+    doc.text("TOTAL QTY:", col3 + 2, totalsTop + 5)
+    doc.text("TOTAL ML/gm:", col3 + 35, totalsTop + 5)
+    doc.text("WEIGHT LBS", col4 + 1, totalsTop + 5)
     doc.text("UNIT VALUE (USD)", col5 + 1, totalsTop + 5)
     doc.text("TOTAL VALUE (USD)", col7 + 1, totalsTop + 5)
 
     doc.setFont("courier", "normal")
-    doc.text(String(get("packages")), col3 + 20, totalsTop + 12)
-    doc.text(String(get("weight")), col3 + 50, totalsTop + 12)
-    doc.text(String(get("qty")), col4 + 5, totalsTop + 12)
-    doc.text(String(get("unitvalue")), col5 + 8, totalsTop + 12)
-    doc.text(String(get("totalvalue")), col7 + 8, totalsTop + 12)
+    doc.text(String(totalQty), col3 + 20, totalsTop + 12)
+    doc.text(String(totalMl), col3 + 55, totalsTop + 12)
+    doc.text(String(get("weight")), col4 + 5, totalsTop + 12)
+    doc.text(unitValue.toFixed(4), col5 + 8, totalsTop + 12)
+    doc.text(FIXED_TOTAL_VALUE.toFixed(2), col7 + 8, totalsTop + 12)
 
     // Declaration box
     const declTop = tableTop + tableHeight
@@ -420,45 +444,99 @@ USA`,
             </div>
           </div>
 
-          {/* Sample Types Table */}
+          {/* Sample Types Table - Enterprise Clean Version */}
           <div className="space-y-2">
-            <Label>Sample Types</Label>
+            <div className="flex items-center justify-between">
+              <Label>Sample Types</Label>
+              <Button variant="outline" size="sm" onClick={addSample}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add Sample
+              </Button>
+            </div>
             <div className="rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
                   <tr>
-                    <th className="p-2 text-left font-medium">Sample Type</th>
-                    <th className="p-2 text-left font-medium">Qty of Tubes</th>
-                    <th className="p-2 text-left font-medium">Total Qty (ML/gm)</th>
+                    <th className="p-2 text-left font-medium">SAMPLE DESCRIPTION</th>
+                    <th className="w-28 p-2 text-left font-medium">QTY (Tubes)</th>
+                    <th className="w-36 p-2 text-left font-medium">TOTAL QTY in ML/gm</th>
+                    <th className="w-16 p-2 text-center font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {samples.map((sample, index) => (
-                    <tr key={sample.type} className="border-t">
-                      <td className="p-2">{sample.type}</td>
-                      <td className="p-2">
-                        <Input
-                          value={sample.tubes}
-                          onChange={(e) =>
-                            handleSampleChange(index, "tubes", e.target.value)
-                          }
-                          className="h-8"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <Input
-                          value={sample.totalQty}
-                          onChange={(e) =>
-                            handleSampleChange(index, "totalQty", e.target.value)
-                          }
-                          className="h-8"
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  {samples.map((sample, index) => {
+                    const totalMlPerRow = calculateMl(sample)
+                    return (
+                      <tr key={index} className="border-t">
+                        <td className="p-2">
+                          <Input
+                            value={sample.description}
+                            onChange={(e) => updateSample(index, "description", e.target.value)}
+                            className="h-8"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            value={sample.qty}
+                            onChange={(e) => updateSample(index, "qty", e.target.value)}
+                            className="h-8"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={totalMlPerRow}
+                            readOnly
+                            className="h-8 bg-muted"
+                          />
+                        </td>
+                        <td className="p-2 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSample(index)}
+                            disabled={samples.length <= 1}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Totals Cards */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="bg-muted/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-xs font-medium text-muted-foreground">TOTAL QTY (Tubes)</p>
+                <p className="text-2xl font-bold">{totalQty}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-xs font-medium text-muted-foreground">TOTAL QTY in ML/gm</p>
+                <p className="text-2xl font-bold">{totalMl}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-xs font-medium text-muted-foreground">UNIT VALUE (USD)</p>
+                <p className="text-2xl font-bold">{unitValue.toFixed(4)}</p>
+                <p className="text-xs text-muted-foreground">= 5 / {totalQty || 1}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="p-4 text-center">
+                <p className="text-xs font-medium text-muted-foreground">TOTAL VALUE (USD)</p>
+                <p className="text-2xl font-bold">{FIXED_TOTAL_VALUE.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Fixed Value</p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Marks and Packages Row */}
@@ -485,8 +563,8 @@ USA`,
             </div>
           </div>
 
-          {/* Weight, Qty, Unit Value, Total Value Row */}
-          <div className="grid gap-4 md:grid-cols-4">
+          {/* Weight Row */}
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="weight">Weight (LBS)</Label>
               <Input
@@ -495,36 +573,6 @@ USA`,
                 value={formData.weight}
                 onChange={handleChange}
                 placeholder="5.00"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="qty">Quantity</Label>
-              <Input
-                id="qty"
-                name="qty"
-                value={formData.qty}
-                onChange={handleChange}
-                placeholder="1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="unitvalue">Unit Value (USD)</Label>
-              <Input
-                id="unitvalue"
-                name="unitvalue"
-                value={formData.unitvalue}
-                onChange={handleChange}
-                placeholder="5"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="totalvalue">Total Value (USD)</Label>
-              <Input
-                id="totalvalue"
-                name="totalvalue"
-                value={formData.totalvalue}
-                onChange={handleChange}
-                placeholder="5"
               />
             </div>
           </div>
