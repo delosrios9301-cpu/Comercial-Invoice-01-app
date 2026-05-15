@@ -370,7 +370,7 @@ USA`,
           {/* Shipper and Consignee Row */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shipper">Shipper / Exporter (Complete name, address, country)</Label>
+              <Label htmlFor="shipper">Shipper / Exporter</Label>
               <Textarea
                 id="shipper"
                 name="shipper"
