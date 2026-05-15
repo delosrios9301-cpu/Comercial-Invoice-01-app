@@ -14,7 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { FileDown, Plus, Trash2, Settings, Edit2 } from "lucide-react"
 
 const FIXED_TOTAL_VALUE = 5
 
@@ -24,35 +31,10 @@ interface SampleRow {
 }
 
 interface StudyConfig {
+  id: string
   name: string
   protocol: string
   shipper: string
-}
-
-// Configuracion de estudios - puedes agregar mas aqui
-const STUDIES: Record<string, StudyConfig> = {
-  "MRNA-1365-P101": {
-    name: "mRNA-1365-P101",
-    protocol: "PR:MDRN0067 MRNA-1365-P101 SITE#PAN03",
-    shipper: `CENTRO VACUNATORIO INTL.SA CEVAXIN
-XIMENA NORERO
-AVE. MEXICO CALLE 33 LOCAL #4
-PANAMA CITY, PANAMA`,
-  },
-  "STUDY-002": {
-    name: "Study 002",
-    protocol: "PR:STUDY002 SITE#001",
-    shipper: `LABORATORIO CENTRAL
-DIRECCION DEL ESTUDIO 002
-CIUDAD, PAIS`,
-  },
-  "STUDY-003": {
-    name: "Study 003",
-    protocol: "PR:STUDY003 SITE#001",
-    shipper: `CLINICA INVESTIGACION
-DIRECCION DEL ESTUDIO 003
-CIUDAD, PAIS`,
-  },
 }
 
 // Meses en espanol para el selector de fecha
@@ -67,8 +49,54 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
 // Generar anos (2024-2030)
 const YEARS = Array.from({ length: 7 }, (_, i) => 2024 + i)
 
+// Configuracion inicial de estudios
+const DEFAULT_STUDIES: StudyConfig[] = [
+  {
+    id: "1",
+    name: "mRNA-1365-P101",
+    protocol: "PR:MDRN0067 MRNA-1365-P101 SITE#PAN03",
+    shipper: `CENTRO VACUNATORIO INTL.SA CEVAXIN
+XIMENA NORERO
+AVE. MEXICO CALLE 33 LOCAL #4
+PANAMA CITY, PANAMA`,
+  },
+  {
+    id: "2",
+    name: "Study 002",
+    protocol: "PR:STUDY002 SITE#001",
+    shipper: `LABORATORIO CENTRAL
+DIRECCION DEL ESTUDIO 002
+CIUDAD, PAIS`,
+  },
+]
+
+// Configuracion inicial de descripciones de muestras
+const DEFAULT_SAMPLE_DESCRIPTIONS = [
+  "HUMAN BLOOD",
+  "HUMAN NASAL SWAB",
+  "HUMAN PBMC",
+  "HUMAN PLASMA",
+  "HUMAN SERUM",
+]
+
 export default function CommercialInvoiceForm() {
-  const [selectedStudy, setSelectedStudy] = useState("MRNA-1365-P101")
+  // Studies management
+  const [studies, setStudies] = useState<StudyConfig[]>(DEFAULT_STUDIES)
+  const [selectedStudyId, setSelectedStudyId] = useState(DEFAULT_STUDIES[0].id)
+  const [studyDialogOpen, setStudyDialogOpen] = useState(false)
+  const [editingStudy, setEditingStudy] = useState<StudyConfig | null>(null)
+  const [newStudy, setNewStudy] = useState<Omit<StudyConfig, "id">>({
+    name: "",
+    protocol: "",
+    shipper: "",
+  })
+
+  // Sample descriptions management
+  const [sampleDescriptions, setSampleDescriptions] = useState<string[]>(DEFAULT_SAMPLE_DESCRIPTIONS)
+  const [sampleDialogOpen, setSampleDialogOpen] = useState(false)
+  const [newSampleDescription, setNewSampleDescription] = useState("")
+  const [editingSampleIndex, setEditingSampleIndex] = useState<number | null>(null)
+  const [editingSampleValue, setEditingSampleValue] = useState("")
   
   // Date of Exportation state
   const [exportDay, setExportDay] = useState(26)
@@ -80,20 +108,22 @@ export default function CommercialInvoiceForm() {
   const [signMonth, setSignMonth] = useState("DIC")
   const [signYear, setSignYear] = useState(2025)
 
+  const selectedStudy = studies.find(s => s.id === selectedStudyId) || studies[0]
+
   const [formData, setFormData] = useState({
     awb: "M7782877",
-    shipper: STUDIES["MRNA-1365-P101"].shipper,
+    shipper: selectedStudy?.shipper || "",
     consignee: `PPD GLOBAL CENTRAL LAB
 DEBBIE KADLER LOGISTICS COORDINATOR
 2 TESSENEER
 HIGHLAND HEIGHTS ZIP CODE: 41076
 USA`,
     destination: "USA",
-    protocol: STUDIES["MRNA-1365-P101"].protocol,
+    protocol: selectedStudy?.protocol || "",
     marks: "1",
     packages: "20",
     weight: "5.00",
-    shippername: "Miguel De Los Ríos",
+    shippername: "Miguel De Los Rios",
     ambientChecked: false,
     dryIceChecked: true,
   })
@@ -112,15 +142,88 @@ USA`,
   }
 
   // Handle study change - auto update shipper and protocol
-  const handleStudyChange = (studyKey: string) => {
-    setSelectedStudy(studyKey)
-    const study = STUDIES[studyKey]
+  const handleStudyChange = (studyId: string) => {
+    setSelectedStudyId(studyId)
+    const study = studies.find(s => s.id === studyId)
     if (study) {
       setFormData(prev => ({
         ...prev,
         shipper: study.shipper,
         protocol: study.protocol,
       }))
+    }
+  }
+
+  // Study management functions
+  const addStudy = () => {
+    if (newStudy.name && newStudy.protocol && newStudy.shipper) {
+      const id = Date.now().toString()
+      setStudies([...studies, { ...newStudy, id }])
+      setNewStudy({ name: "", protocol: "", shipper: "" })
+    }
+  }
+
+  const updateStudy = () => {
+    if (editingStudy) {
+      setStudies(studies.map(s => s.id === editingStudy.id ? editingStudy : s))
+      // Update form data if the edited study is currently selected
+      if (editingStudy.id === selectedStudyId) {
+        setFormData(prev => ({
+          ...prev,
+          shipper: editingStudy.shipper,
+          protocol: editingStudy.protocol,
+        }))
+      }
+      setEditingStudy(null)
+    }
+  }
+
+  const deleteStudy = (id: string) => {
+    if (studies.length > 1) {
+      const newStudies = studies.filter(s => s.id !== id)
+      setStudies(newStudies)
+      if (selectedStudyId === id) {
+        setSelectedStudyId(newStudies[0].id)
+        setFormData(prev => ({
+          ...prev,
+          shipper: newStudies[0].shipper,
+          protocol: newStudies[0].protocol,
+        }))
+      }
+    }
+  }
+
+  // Sample description management functions
+  const addSampleDescription = () => {
+    if (newSampleDescription.trim()) {
+      setSampleDescriptions([...sampleDescriptions, newSampleDescription.trim().toUpperCase()])
+      setNewSampleDescription("")
+    }
+  }
+
+  const updateSampleDescription = () => {
+    if (editingSampleIndex !== null && editingSampleValue.trim()) {
+      const newDescriptions = [...sampleDescriptions]
+      const oldValue = newDescriptions[editingSampleIndex]
+      newDescriptions[editingSampleIndex] = editingSampleValue.trim().toUpperCase()
+      setSampleDescriptions(newDescriptions)
+      
+      // Update any samples using this description
+      setSamples(samples.map(sample => 
+        sample.description === oldValue 
+          ? { ...sample, description: newDescriptions[editingSampleIndex] }
+          : sample
+      ))
+      
+      setEditingSampleIndex(null)
+      setEditingSampleValue("")
+    }
+  }
+
+  const deleteSampleDescription = (index: number) => {
+    if (sampleDescriptions.length > 1) {
+      const newDescriptions = sampleDescriptions.filter((_, i) => i !== index)
+      setSampleDescriptions(newDescriptions)
     }
   }
 
@@ -165,7 +268,7 @@ USA`,
   }
 
   const addSample = () => {
-    setSamples([...samples, { description: "NEW SAMPLE", qty: 0 }])
+    setSamples([...samples, { description: sampleDescriptions[0] || "NEW SAMPLE", qty: 0 }])
   }
 
   const removeSample = (index: number) => {
@@ -408,7 +511,7 @@ USA`,
     doc.text(String(get("shippername")), margin + 2, declTop + 22)
     doc.text(signDate, margin + 50, declTop + 22)
 
-    doc.save("Commercial_Invoice_mRNA-1365-P101.pdf")
+    doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
   }
 
   return (
@@ -423,16 +526,117 @@ USA`,
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Study Selector */}
+          {/* Study Selector with Management */}
           <div className="space-y-2">
-            <Label>Seleccionar Estudio</Label>
-            <Select value={selectedStudy} onValueChange={handleStudyChange}>
+            <div className="flex items-center justify-between">
+              <Label>Seleccionar Estudio</Label>
+              <Dialog open={studyDialogOpen} onOpenChange={setStudyDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Settings className="mr-1 h-4 w-4" />
+                    Gestionar Estudios
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Gestionar Estudios</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {/* Existing Studies */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Estudios Existentes</Label>
+                      {studies.map((study) => (
+                        <Card key={study.id} className="p-3">
+                          {editingStudy?.id === study.id ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={editingStudy.name}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, name: e.target.value })}
+                                placeholder="Nombre del estudio"
+                              />
+                              <Input
+                                value={editingStudy.protocol}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, protocol: e.target.value })}
+                                placeholder="Protocolo"
+                              />
+                              <Textarea
+                                value={editingStudy.shipper}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, shipper: e.target.value })}
+                                placeholder="Direccion del Shipper"
+                                className="min-h-[80px]"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={updateStudy}>Guardar</Button>
+                                <Button size="sm" variant="outline" onClick={() => setEditingStudy(null)}>Cancelar</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium">{study.name}</p>
+                                <p className="text-xs text-muted-foreground">{study.protocol}</p>
+                                <p className="text-xs text-muted-foreground mt-1 whitespace-pre-line">{study.shipper}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingStudy(study)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteStudy(study.id)}
+                                  disabled={studies.length <= 1}
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Add New Study */}
+                    <div className="space-y-2 border-t pt-4">
+                      <Label className="text-sm font-medium">Agregar Nuevo Estudio</Label>
+                      <Input
+                        value={newStudy.name}
+                        onChange={(e) => setNewStudy({ ...newStudy, name: e.target.value })}
+                        placeholder="Nombre del estudio"
+                      />
+                      <Input
+                        value={newStudy.protocol}
+                        onChange={(e) => setNewStudy({ ...newStudy, protocol: e.target.value })}
+                        placeholder="Protocolo (ej: PR:STUDY001 SITE#001)"
+                      />
+                      <Textarea
+                        value={newStudy.shipper}
+                        onChange={(e) => setNewStudy({ ...newStudy, shipper: e.target.value })}
+                        placeholder="Direccion del Shipper (nombre, direccion, ciudad, pais)"
+                        className="min-h-[80px]"
+                      />
+                      <Button onClick={addStudy} disabled={!newStudy.name || !newStudy.protocol || !newStudy.shipper}>
+                        <Plus className="mr-1 h-4 w-4" />
+                        Agregar Estudio
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            <Select value={selectedStudyId} onValueChange={handleStudyChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un estudio" />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(STUDIES).map(([key, study]) => (
-                  <SelectItem key={key} value={key}>
+                {studies.map((study) => (
+                  <SelectItem key={study.id} value={study.id}>
                     {study.name}
                   </SelectItem>
                 ))}
@@ -575,14 +779,94 @@ USA`,
             </div>
           </div>
 
-          {/* Sample Types Table - Enterprise Clean Version */}
+          {/* Sample Types Table with Description Dropdown */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Sample Types</Label>
-              <Button variant="outline" size="sm" onClick={addSample}>
-                <Plus className="mr-1 h-4 w-4" />
-                Add Sample
-              </Button>
+              <div className="flex gap-2">
+                <Dialog open={sampleDialogOpen} onOpenChange={setSampleDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Settings className="mr-1 h-4 w-4" />
+                      Gestionar Descripciones
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Gestionar Descripciones de Muestras</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      {/* Existing Descriptions */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Descripciones Existentes</Label>
+                        {sampleDescriptions.map((desc, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            {editingSampleIndex === index ? (
+                              <>
+                                <Input
+                                  value={editingSampleValue}
+                                  onChange={(e) => setEditingSampleValue(e.target.value)}
+                                  className="flex-1"
+                                />
+                                <Button size="sm" onClick={updateSampleDescription}>Guardar</Button>
+                                <Button size="sm" variant="outline" onClick={() => {
+                                  setEditingSampleIndex(null)
+                                  setEditingSampleValue("")
+                                }}>Cancelar</Button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex-1 text-sm">{desc}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingSampleIndex(index)
+                                    setEditingSampleValue(desc)
+                                  }}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteSampleDescription(index)}
+                                  disabled={sampleDescriptions.length <= 1}
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add New Description */}
+                      <div className="space-y-2 border-t pt-4">
+                        <Label className="text-sm font-medium">Agregar Nueva Descripcion</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={newSampleDescription}
+                            onChange={(e) => setNewSampleDescription(e.target.value)}
+                            placeholder="Nueva descripcion de muestra"
+                            className="flex-1"
+                          />
+                          <Button onClick={addSampleDescription} disabled={!newSampleDescription.trim()}>
+                            <Plus className="mr-1 h-4 w-4" />
+                            Agregar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                <Button variant="outline" size="sm" onClick={addSample}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Add Sample
+                </Button>
+              </div>
             </div>
             <div className="rounded-md border">
               <table className="w-full text-sm">
@@ -600,11 +884,21 @@ USA`,
                     return (
                       <tr key={index} className="border-t">
                         <td className="p-2">
-                          <Input
+                          <Select
                             value={sample.description}
-                            onChange={(e) => updateSample(index, "description", e.target.value)}
-                            className="h-8"
-                          />
+                            onValueChange={(value) => updateSample(index, "description", value)}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sampleDescriptions.map((desc) => (
+                                <SelectItem key={desc} value={desc}>
+                                  {desc}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="p-2">
                           <Input
