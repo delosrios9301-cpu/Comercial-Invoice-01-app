@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { FileDown, Plus, Trash2 } from "lucide-react"
 
 const FIXED_TOTAL_VALUE = 5
@@ -16,26 +23,77 @@ interface SampleRow {
   qty: number
 }
 
-export default function CommercialInvoiceForm() {
-  const [formData, setFormData] = useState({
-    date: "26 DIC 2025",
-    awb: "M7782877",
+interface StudyConfig {
+  name: string
+  protocol: string
+  shipper: string
+}
+
+// Configuracion de estudios - puedes agregar mas aqui
+const STUDIES: Record<string, StudyConfig> = {
+  "MRNA-1365-P101": {
+    name: "mRNA-1365-P101",
+    protocol: "PR:MDRN0067 MRNA-1365-P101 SITE#PAN03",
     shipper: `CENTRO VACUNATORIO INTL.SA CEVAXIN
 XIMENA NORERO
 AVE. MEXICO CALLE 33 LOCAL #4
 PANAMA CITY, PANAMA`,
+  },
+  "STUDY-002": {
+    name: "Study 002",
+    protocol: "PR:STUDY002 SITE#001",
+    shipper: `LABORATORIO CENTRAL
+DIRECCION DEL ESTUDIO 002
+CIUDAD, PAIS`,
+  },
+  "STUDY-003": {
+    name: "Study 003",
+    protocol: "PR:STUDY003 SITE#001",
+    shipper: `CLINICA INVESTIGACION
+DIRECCION DEL ESTUDIO 003
+CIUDAD, PAIS`,
+  },
+}
+
+// Meses en espanol para el selector de fecha
+const MONTHS = [
+  "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+  "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"
+]
+
+// Generar dias del 1 al 31
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
+
+// Generar anos (2024-2030)
+const YEARS = Array.from({ length: 7 }, (_, i) => 2024 + i)
+
+export default function CommercialInvoiceForm() {
+  const [selectedStudy, setSelectedStudy] = useState("MRNA-1365-P101")
+  
+  // Date of Exportation state
+  const [exportDay, setExportDay] = useState(26)
+  const [exportMonth, setExportMonth] = useState("DIC")
+  const [exportYear, setExportYear] = useState(2025)
+  
+  // Signature Date state
+  const [signDay, setSignDay] = useState(26)
+  const [signMonth, setSignMonth] = useState("DIC")
+  const [signYear, setSignYear] = useState(2025)
+
+  const [formData, setFormData] = useState({
+    awb: "M7782877",
+    shipper: STUDIES["MRNA-1365-P101"].shipper,
     consignee: `PPD GLOBAL CENTRAL LAB
 DEBBIE KADLER LOGISTICS COORDINATOR
 2 TESSENEER
 HIGHLAND HEIGHTS ZIP CODE: 41076
 USA`,
     destination: "USA",
-    protocol: "PR:MDRN0067 MRNA-1365-P101 SITE#PAN03",
+    protocol: STUDIES["MRNA-1365-P101"].protocol,
     marks: "1",
     packages: "20",
     weight: "5.00",
     shippername: "Miguel De Los Ríos",
-    signdate: "26 DIC 2025",
     ambientChecked: false,
     dryIceChecked: true,
   })
@@ -47,6 +105,24 @@ USA`,
     { description: "HUMAN PLASMA", qty: 0 },
     { description: "HUMAN SERUM", qty: 0 },
   ])
+
+  // Format date for display
+  const formatDate = (day: number, month: string, year: number) => {
+    return `${day} ${month} ${year}`
+  }
+
+  // Handle study change - auto update shipper and protocol
+  const handleStudyChange = (studyKey: string) => {
+    setSelectedStudy(studyKey)
+    const study = STUDIES[studyKey]
+    if (study) {
+      setFormData(prev => ({
+        ...prev,
+        shipper: study.shipper,
+        protocol: study.protocol,
+      }))
+    }
+  }
 
   // Calculate ML/gm for a single row
   const calculateMl = (sample: SampleRow): number => {
@@ -110,6 +186,10 @@ USA`,
     const contentWidth = pageWidth - margin * 2
 
     const get = (field: keyof typeof formData) => formData[field] || ""
+    
+    // Get formatted dates
+    const exportDate = formatDate(exportDay, exportMonth, exportYear)
+    const signDate = formatDate(signDay, signMonth, signYear)
 
     doc.setFont("courier", "normal")
     doc.setFontSize(8)
@@ -120,7 +200,7 @@ USA`,
     doc.text("Air Way Bill No:", margin + contentWidth / 2, 12)
 
     // Date and AWB values
-    doc.text(String(get("date")), margin, 18)
+    doc.text(exportDate, margin, 18)
     doc.text(String(get("awb")), margin + contentWidth / 2, 18)
 
     // Shipper and Consignee boxes
@@ -133,7 +213,7 @@ USA`,
 
     doc.setFont("courier", "bold")
     doc.setFontSize(7)
-    doc.text("Shipper/Exporter: (Complete name, address, country)", margin + 2, boxTop + 5)
+    doc.text("Shipper/Exporter:", margin + 2, boxTop + 5)
     doc.text("CONSIGNEE:", margin + halfWidth + 6, boxTop + 5)
 
     doc.setFont("courier", "normal")
@@ -326,7 +406,7 @@ USA`,
 
     doc.setFontSize(8)
     doc.text(String(get("shippername")), margin + 2, declTop + 22)
-    doc.text(String(get("signdate")), margin + 50, declTop + 22)
+    doc.text(signDate, margin + 50, declTop + 22)
 
     doc.save("Commercial_Invoice_mRNA-1365-P101.pdf")
   }
@@ -343,28 +423,79 @@ USA`,
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Date and AWB Row */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="date">Date of Exportation</Label>
-              <Input
-                id="date"
-                name="date"
-                value={formData.date}
-                onChange={handleChange}
-                placeholder="26 DIC 2025"
-              />
+          {/* Study Selector */}
+          <div className="space-y-2">
+            <Label>Seleccionar Estudio</Label>
+            <Select value={selectedStudy} onValueChange={handleStudyChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona un estudio" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(STUDIES).map(([key, study]) => (
+                  <SelectItem key={key} value={key}>
+                    {study.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Al cambiar el estudio se actualizara automaticamente el Shipper y Protocolo
+            </p>
+          </div>
+
+          {/* Date of Exportation with selectors */}
+          <div className="space-y-2">
+            <Label>Date of Exportation</Label>
+            <div className="flex gap-2">
+              <Select value={String(exportDay)} onValueChange={(v) => setExportDay(Number(v))}>
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAYS.map((day) => (
+                    <SelectItem key={day} value={String(day)}>
+                      {day}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={exportMonth} onValueChange={setExportMonth}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((month) => (
+                    <SelectItem key={month} value={month}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(exportYear)} onValueChange={(v) => setExportYear(Number(v))}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map((year) => (
+                    <SelectItem key={year} value={String(year)}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="awb">Air Way Bill No</Label>
-              <Input
-                id="awb"
-                name="awb"
-                value={formData.awb}
-                onChange={handleChange}
-                placeholder="M7782877"
-              />
-            </div>
+          </div>
+
+          {/* AWB */}
+          <div className="space-y-2">
+            <Label htmlFor="awb">Air Way Bill No</Label>
+            <Input
+              id="awb"
+              name="awb"
+              value={formData.awb}
+              onChange={handleChange}
+              placeholder="M7782877"
+            />
           </div>
 
           {/* Shipper and Consignee Row */}
@@ -590,14 +721,45 @@ USA`,
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="signdate">Signature Date</Label>
-              <Input
-                id="signdate"
-                name="signdate"
-                value={formData.signdate}
-                onChange={handleChange}
-                placeholder="26 DIC 2025"
-              />
+              <Label>Signature Date</Label>
+              <div className="flex gap-2">
+                <Select value={String(signDay)} onValueChange={(v) => setSignDay(Number(v))}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAYS.map((day) => (
+                      <SelectItem key={day} value={String(day)}>
+                        {day}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={signMonth} onValueChange={setSignMonth}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((month) => (
+                      <SelectItem key={month} value={month}>
+                        {month}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(signYear)} onValueChange={(v) => setSignYear(Number(v))}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
