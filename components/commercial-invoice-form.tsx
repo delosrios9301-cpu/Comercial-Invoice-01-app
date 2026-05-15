@@ -280,7 +280,7 @@ USA`,
     doc.setFontSize(7)
     doc.text(String(get("weight")), col4 + 3, contentY)
     doc.text(String(totalQty), col5 + 3, contentY)
-    doc.text(unitValue.toFixed(4), col6 + 3, contentY)
+    doc.text(unitValue.toFixed(2), col6 + 3, contentY)
     doc.text(FIXED_TOTAL_VALUE.toFixed(2), col7 + 3, contentY)
 
     // Totals row
@@ -301,7 +301,7 @@ USA`,
     doc.text(String(totalQty), col3 + 20, totalsTop + 12)
     doc.text(String(totalMl), col3 + 55, totalsTop + 12)
     doc.text(String(get("weight")), col4 + 5, totalsTop + 12)
-    doc.text(unitValue.toFixed(4), col5 + 8, totalsTop + 12)
+    doc.text(unitValue.toFixed(2), col5 + 8, totalsTop + 12)
     doc.text(FIXED_TOTAL_VALUE.toFixed(2), col7 + 8, totalsTop + 12)
 
     // Declaration box
@@ -526,7 +526,7 @@ USA`,
             <Card className="bg-muted/50">
               <CardContent className="p-4 text-center">
                 <p className="text-xs font-medium text-muted-foreground">UNIT VALUE (USD)</p>
-                <p className="text-2xl font-bold">{unitValue.toFixed(4)}</p>
+                <p className="text-2xl font-bold">{unitValue.toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground">= 5 / {totalQty || 1}</p>
               </CardContent>
             </Card>
