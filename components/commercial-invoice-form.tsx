@@ -477,8 +477,10 @@ USA`,
     doc.text("TOTAL QTY:", col3 + 2, totalsTop + 5)
     doc.text("TOTAL ML/gm:", col3 + 35, totalsTop + 5)
     doc.text("WEIGHT LBS", col4 + 1, totalsTop + 5)
-    doc.text("UNIT VALUE (USD)", col5 + 1, totalsTop + 5)
-    doc.text("TOTAL VALUE (USD)", col7 + 1, totalsTop + 5)
+    doc.text("UNIT VALUE", col5 + 1, totalsTop + 5)
+    doc.text("(USD)", col5 + 4, totalsTop + 9)
+    doc.text("TOTAL VALUE", col7 + 1, totalsTop + 5)
+    doc.text("(USD)", col7 + 4, totalsTop + 9)
 
     doc.setFont("courier", "normal")
     doc.text(String(totalQty), col3 + 20, totalsTop + 12)
