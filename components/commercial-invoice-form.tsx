@@ -483,8 +483,8 @@ USA`,
     doc.text("(USD)", col7 + 4, totalsTop + 9)
 
     doc.setFont("courier", "normal")
-    doc.text(String(totalQty), col3 + 20, totalsTop + 12)
-    doc.text(String(totalMl), col3 + 55, totalsTop + 12)
+    doc.text(String(totalQty), col3 + 12, totalsTop + 12)
+    doc.text(String(totalMl), col3 + 50, totalsTop + 12)
     doc.text(String(get("weight")), col4 + 5, totalsTop + 12)
     doc.text(unitValue.toFixed(2), col5 + 8, totalsTop + 12)
     doc.text(FIXED_TOTAL_VALUE.toFixed(2), col7 + 8, totalsTop + 12)
