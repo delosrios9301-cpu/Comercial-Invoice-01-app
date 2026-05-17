@@ -1,55 +1,81 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-export async function POST(request: Request) {
-  const { email, password, fullName, sedeId } = await request.json()
+export async function POST() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  console.log("[v0] Creating admin user with:", { email, fullName, sedeId })
-  console.log("[v0] SUPABASE_URL exists:", !!process.env.SUPABASE_URL)
-  console.log("[v0] SUPABASE_SERVICE_ROLE_KEY exists:", !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return NextResponse.json({ error: "Missing Supabase environment variables" }, { status: 500 })
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ 
+      error: "Missing environment variables",
+      details: {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!serviceRoleKey
+      }
+    }, { status: 500 })
   }
 
-  // Use service role key to bypass rate limits and email confirmation
-  const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
-
-  // Create user with Admin API (bypasses rate limits and confirms email automatically)
-  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: fullName,
-      sede_id: sedeId
-    }
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   })
 
-  console.log("[v0] Admin createUser response:", { userData, userError })
+  // Get sede ID for Ave. Mexico
+  const { data: sedes } = await supabaseAdmin.from("sedes").select("id").eq("name", "Ave. Mexico").single()
+  const sedeId = sedes?.id
 
-  if (userError) {
-    return NextResponse.json({ error: userError.message }, { status: 400 })
+  if (!sedeId) {
+    // Get any sede
+    const { data: anySede } = await supabaseAdmin.from("sedes").select("id").limit(1).single()
+    if (!anySede?.id) {
+      return NextResponse.json({ error: "No sedes found" }, { status: 400 })
+    }
   }
 
-  // Update the profile to set as admin
+  const finalSedeId = sedeId || (await supabaseAdmin.from("sedes").select("id").limit(1).single()).data?.id
+
+  // Delete existing admin user if exists
+  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+  const existingAdmin = existingUsers?.users?.find(u => u.email === "admin@miguel.com")
+  
+  if (existingAdmin) {
+    await supabaseAdmin.auth.admin.deleteUser(existingAdmin.id)
+  }
+
+  // Create admin user
+  const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email: "admin@miguel.com",
+    password: "Admin123!",
+    email_confirm: true,
+    user_metadata: {
+      full_name: "Admin",
+      sede_id: finalSedeId,
+    },
+  })
+
+  if (createError) {
+    return NextResponse.json({ error: createError.message }, { status: 400 })
+  }
+
+  // Set as admin in profiles
   if (userData.user) {
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .update({ is_admin: true })
-      .eq("id", userData.user.id)
-
-    console.log("[v0] Profile update result:", { profileError })
+    await supabaseAdmin.from("profiles").upsert({
+      id: userData.user.id,
+      email: "admin@miguel.com",
+      full_name: "Admin",
+      sede_id: finalSedeId,
+      is_admin: true,
+    })
   }
 
-  return NextResponse.json({ success: true, user: userData.user })
+  return NextResponse.json({ 
+    success: true, 
+    message: "Admin creado exitosamente. Ahora puedes iniciar sesion.",
+    credentials: {
+      email: "admin@miguel.com",
+      password: "Admin123!"
+    }
+  })
 }

@@ -44,26 +44,28 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          sede_id: sedeId,
-        },
-      },
-    })
+    try {
+      // Use server API to create user (bypasses email confirmation)
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, fullName, sedeId }),
+      })
 
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else if (data.user) {
-      // Sign in immediately after signup (no email confirmation needed)
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || "Error al crear usuario")
+        setLoading(false)
+        return
+      }
+
+      // User created, now sign in
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
+
       if (signInError) {
         setError(signInError.message)
         setLoading(false)
@@ -71,6 +73,9 @@ export default function SignUpPage() {
         router.push("/")
         router.refresh()
       }
+    } catch (err) {
+      setError("Error de conexion")
+      setLoading(false)
     }
   }
 
