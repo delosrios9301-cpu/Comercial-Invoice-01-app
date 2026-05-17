@@ -44,6 +44,8 @@ export async function updateSession(request: NextRequest) {
   if (
     // if the user is not logged in and trying to access protected routes, redirect to login
     !request.nextUrl.pathname.startsWith('/auth') &&
+    !request.nextUrl.pathname.startsWith('/setup-admin') &&
+    !request.nextUrl.pathname.startsWith('/api/create-admin') &&
     !user
   ) {
     // no user, redirect to login page
