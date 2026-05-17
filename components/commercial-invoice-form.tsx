@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users } from "lucide-react"
+import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -511,12 +511,20 @@ export default function CommercialInvoiceForm() {
             </div>
             <div className="flex gap-2">
               {user?.is_admin && (
-                <Link href="/users">
-                  <Button variant="outline" size="sm">
-                    <Users className="mr-1 h-4 w-4" />
-                    Usuarios
-                  </Button>
-                </Link>
+                <>
+                  <Link href="/sedes">
+                    <Button variant="outline" size="sm">
+                      <Building2 className="mr-1 h-4 w-4" />
+                      Sedes
+                    </Button>
+                  </Link>
+                  <Link href="/users">
+                    <Button variant="outline" size="sm">
+                      <Users className="mr-1 h-4 w-4" />
+                      Usuarios
+                    </Button>
+                  </Link>
+                </>
               )}
               <Link href="/settings">
                 <Button variant="outline" size="sm">
