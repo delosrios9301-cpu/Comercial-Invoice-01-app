@@ -1,24 +1,33 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   const { email, password, fullName, sedeId } = await request.json()
 
-  const supabase = await createClient()
+  // Use service role key to bypass rate limits and email confirmation
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  )
 
-  // Create user with signUp
-  const { data: userData, error: userError } = await supabase.auth.signUp({
+  // Create user with Admin API (bypasses rate limits and confirms email automatically)
+  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
-    options: {
-      data: {
-        full_name: fullName,
-        sede_id: sedeId
-      }
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      sede_id: sedeId
     }
   })
 
-  console.log("[v0] SignUp response:", { userData, userError })
+  console.log("[v0] Admin createUser response:", { userData, userError })
 
   if (userError) {
     return NextResponse.json({ error: userError.message }, { status: 400 })
@@ -26,7 +35,7 @@ export async function POST(request: Request) {
 
   // Update the profile to set as admin
   if (userData.user) {
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({ is_admin: true })
       .eq("id", userData.user.id)
