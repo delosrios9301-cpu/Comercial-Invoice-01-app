@@ -4,6 +4,14 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
   const { email, password, fullName, sedeId } = await request.json()
 
+  console.log("[v0] Creating admin user with:", { email, fullName, sedeId })
+  console.log("[v0] SUPABASE_URL exists:", !!process.env.SUPABASE_URL)
+  console.log("[v0] SUPABASE_SERVICE_ROLE_KEY exists:", !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: "Missing Supabase environment variables" }, { status: 500 })
+  }
+
   // Use service role key to bypass rate limits and email confirmation
   const supabaseAdmin = createClient(
     process.env.SUPABASE_URL!,
