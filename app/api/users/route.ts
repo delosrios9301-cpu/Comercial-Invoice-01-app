@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function POST(request: Request) {
-  const { email, password, fullName, sedeIds, canEdit } = await request.json()
+  const { email, password, fullName, sedeIds, canEdit, canViewAudit } = await request.json()
 
   // First verify the requester is an admin
   const supabaseServer = await createServerClient()
@@ -43,11 +43,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: createError.message }, { status: 400 })
   }
 
-  // Update profile with can_edit permission
+  // Update profile with can_edit and can_view_audit permissions
   if (newUser.user) {
     await supabaseAdmin
       .from("profiles")
-      .update({ can_edit: canEdit })
+      .update({ can_edit: canEdit, can_view_audit: canViewAudit })
       .eq("id", newUser.user.id)
 
     // Insert user_sedes relationships
@@ -98,7 +98,8 @@ export async function GET() {
       email,
       full_name,
       is_admin,
-      can_edit
+      can_edit,
+      can_view_audit
     `)
 
   if (error) {
@@ -127,7 +128,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { userId, canEdit, isAdmin, sedeIds } = await request.json()
+  const { userId, canEdit, isAdmin, canViewAudit, sedeIds } = await request.json()
 
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -154,7 +155,7 @@ export async function PUT(request: Request) {
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .update({ can_edit: canEdit, is_admin: isAdmin })
+    .update({ can_edit: canEdit, is_admin: isAdmin, can_view_audit: canViewAudit })
     .eq("id", userId)
 
   if (error) {

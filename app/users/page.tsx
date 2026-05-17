@@ -25,7 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Plus, Trash2, Shield, Edit, Users, Building2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Shield, Edit, Users, Building2, History } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 
@@ -40,6 +40,7 @@ interface User {
   full_name: string
   is_admin: boolean
   can_edit: boolean
+  can_view_audit: boolean
   sedes: Sede[]
 }
 
@@ -60,11 +61,13 @@ export default function UsersPage() {
   const [newFullName, setNewFullName] = useState("")
   const [newSedeIds, setNewSedeIds] = useState<string[]>([])
   const [newCanEdit, setNewCanEdit] = useState(false)
+  const [newCanViewAudit, setNewCanViewAudit] = useState(false)
 
   // Edit user form
   const [editSedeIds, setEditSedeIds] = useState<string[]>([])
   const [editCanEdit, setEditCanEdit] = useState(false)
   const [editIsAdmin, setEditIsAdmin] = useState(false)
+  const [editCanViewAudit, setEditCanViewAudit] = useState(false)
   
   const router = useRouter()
   const supabase = createClient()
@@ -144,6 +147,7 @@ export default function UsersPage() {
         fullName: newFullName,
         sedeIds: newSedeIds,
         canEdit: newCanEdit,
+        canViewAudit: newCanViewAudit,
       }),
     })
 
@@ -161,6 +165,7 @@ export default function UsersPage() {
     setNewFullName("")
     setNewSedeIds([])
     setNewCanEdit(false)
+    setNewCanViewAudit(false)
     setDialogOpen(false)
     setSaving(false)
     await loadUsers()
@@ -171,6 +176,7 @@ export default function UsersPage() {
     setEditSedeIds(user.sedes?.map(s => s.id) || [])
     setEditCanEdit(user.can_edit)
     setEditIsAdmin(user.is_admin)
+    setEditCanViewAudit(user.can_view_audit || false)
     setEditDialogOpen(true)
   }
 
@@ -186,6 +192,7 @@ export default function UsersPage() {
         userId: editingUser.id, 
         canEdit: editCanEdit, 
         isAdmin: editIsAdmin,
+        canViewAudit: editCanViewAudit,
         sedeIds: editSedeIds
       }),
     })
@@ -328,6 +335,17 @@ export default function UsersPage() {
                     Puede editar configuraciones (estudios, muestras)
                   </Label>
                 </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="canViewAudit"
+                    checked={newCanViewAudit}
+                    onCheckedChange={(checked) => setNewCanViewAudit(checked as boolean)}
+                  />
+                  <Label htmlFor="canViewAudit" className="cursor-pointer">
+                    Puede ver historial de cambios
+                  </Label>
+                </div>
               </div>
               
               <DialogFooter>
@@ -357,7 +375,8 @@ export default function UsersPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Sedes</TableHead>
                   <TableHead className="text-center">Admin</TableHead>
-                  <TableHead className="text-center">Puede Editar</TableHead>
+                  <TableHead className="text-center">Editar</TableHead>
+                  <TableHead className="text-center">Historial</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -393,6 +412,13 @@ export default function UsersPage() {
                         <span className="text-muted-foreground">No</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-center">
+                      {user.can_view_audit ? (
+                        <Badge className="bg-green-100 text-green-700">Si</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">No</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -416,7 +442,7 @@ export default function UsersPage() {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No hay usuarios registrados
                     </TableCell>
                   </TableRow>
@@ -477,6 +503,16 @@ export default function UsersPage() {
                     Puede editar configuraciones
                   </Label>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="editCanViewAudit"
+                    checked={editCanViewAudit}
+                    onCheckedChange={(checked) => setEditCanViewAudit(checked as boolean)}
+                  />
+                  <Label htmlFor="editCanViewAudit" className="cursor-pointer">
+                    Puede ver historial de cambios
+                  </Label>
+                </div>
               </div>
             </div>
             
@@ -516,7 +552,16 @@ export default function UsersPage() {
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
-              <Building2 className="h-5 w-5 text-green-500 mt-0.5" />
+              <History className="h-5 w-5 text-green-500 mt-0.5" />
+              <div>
+                <p className="font-medium">Ver Historial</p>
+                <p className="text-sm text-muted-foreground">
+                  Puede ver el historial de cambios realizados en el sistema (auditoría).
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
+              <Building2 className="h-5 w-5 text-orange-500 mt-0.5" />
               <div>
                 <p className="font-medium">Multiples Sedes</p>
                 <p className="text-sm text-muted-foreground">

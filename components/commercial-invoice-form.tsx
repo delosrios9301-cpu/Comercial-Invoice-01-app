@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2 } from "lucide-react"
+import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2, History } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -52,6 +52,7 @@ interface UserProfile {
   sede_id: string
   is_admin: boolean
   can_edit: boolean
+  can_view_audit: boolean
 }
 
 // Meses en espanol para el PDF
@@ -528,6 +529,14 @@ export default function CommercialInvoiceForm() {
                     </Button>
                   </Link>
                 </>
+              )}
+              {(user?.is_admin || user?.can_view_audit) && (
+                <Link href="/audit">
+                  <Button variant="outline" size="sm">
+                    <History className="mr-1 h-4 w-4" />
+                    Historial
+                  </Button>
+                </Link>
               )}
               <Link href="/settings">
                 <Button variant="outline" size="sm">

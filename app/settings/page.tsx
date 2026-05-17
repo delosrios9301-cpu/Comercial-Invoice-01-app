@@ -132,6 +132,40 @@ export default function SettingsPage() {
 
   const canModify = user?.is_admin || user?.can_edit
 
+  // Function to log audit changes
+  const logAudit = async (
+    action: string, 
+    entityType: string, 
+    entityId: string | null, 
+    entityName: string,
+    oldValue?: Record<string, unknown>,
+    newValue?: Record<string, unknown>,
+    description?: string
+  ) => {
+    const sedeId = selectedSedeId || userSedes[0]?.id
+    const sedeName = userSedes.find(s => s.id === sedeId)?.name
+
+    try {
+      await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sede_id: sedeId,
+          sede_name: sedeName,
+          action,
+          entity_type: entityType,
+          entity_id: entityId,
+          entity_name: entityName,
+          old_value: oldValue,
+          new_value: newValue,
+          description,
+        }),
+      })
+    } catch (error) {
+      console.error("Error logging audit:", error)
+    }
+  }
+
   // Study CRUD operations
   const handleAddStudy = async () => {
     if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) return
@@ -153,6 +187,12 @@ export default function SettingsPage() {
 
     if (!error && data) {
       setStudies([...studies, data])
+      await logAudit("CREATE", "study", data.id, data.name, undefined, {
+        name: data.name,
+        protocol: data.protocol,
+        shipper_address: data.shipper_address,
+        consignee_address: data.consignee_address,
+      }, `Estudio "${data.name}" creado`)
       setNewStudy({ name: "", protocol: "", shipper_address: "", consignee_address: "" })
       setShowNewStudy(false)
     }
@@ -160,6 +200,8 @@ export default function SettingsPage() {
 
   const handleUpdateStudy = async () => {
     if (!editingStudy) return
+
+    const originalStudy = studies.find(s => s.id === editingStudy.id)
 
     const { error } = await supabase
       .from("studies")
@@ -173,14 +215,38 @@ export default function SettingsPage() {
 
     if (!error) {
       setStudies(studies.map(s => s.id === editingStudy.id ? editingStudy : s))
+      await logAudit("UPDATE", "study", editingStudy.id, editingStudy.name, 
+        originalStudy ? {
+          name: originalStudy.name,
+          protocol: originalStudy.protocol,
+          shipper_address: originalStudy.shipper_address,
+          consignee_address: originalStudy.consignee_address,
+        } : undefined,
+        {
+          name: editingStudy.name,
+          protocol: editingStudy.protocol,
+          shipper_address: editingStudy.shipper_address,
+          consignee_address: editingStudy.consignee_address,
+        }, 
+        `Estudio "${editingStudy.name}" actualizado`
+      )
       setEditingStudy(null)
     }
   }
 
   const handleDeleteStudy = async (id: string) => {
+    const studyToDelete = studies.find(s => s.id === id)
     const { error } = await supabase.from("studies").delete().eq("id", id)
     if (!error) {
       setStudies(studies.filter(s => s.id !== id))
+      if (studyToDelete) {
+        await logAudit("DELETE", "study", id, studyToDelete.name, {
+          name: studyToDelete.name,
+          protocol: studyToDelete.protocol,
+          shipper_address: studyToDelete.shipper_address,
+          consignee_address: studyToDelete.consignee_address,
+        }, undefined, `Estudio "${studyToDelete.name}" eliminado`)
+      }
     }
   }
 
@@ -202,6 +268,9 @@ export default function SettingsPage() {
 
     if (!error && data) {
       setSampleDescriptions([...sampleDescriptions, data])
+      await logAudit("CREATE", "sample_description", data.id, data.description, undefined, {
+        description: data.description,
+      }, `Descripcion de muestra "${data.description}" creada`)
       setNewSampleDesc("")
       setShowNewSample(false)
     }
@@ -209,6 +278,8 @@ export default function SettingsPage() {
 
   const handleUpdateSample = async () => {
     if (!editingSample) return
+
+    const originalSample = sampleDescriptions.find(s => s.id === editingSample.id)
 
     const { error } = await supabase
       .from("sample_descriptions")
@@ -221,14 +292,27 @@ export default function SettingsPage() {
       setSampleDescriptions(sampleDescriptions.map(s => 
         s.id === editingSample.id ? { ...s, description: editingSample.description.toUpperCase() } : s
       ))
+      await logAudit("UPDATE", "sample_description", editingSample.id, editingSample.description,
+        originalSample ? { description: originalSample.description } : undefined,
+        { description: editingSample.description.toUpperCase() },
+        `Descripcion de muestra actualizada de "${originalSample?.description}" a "${editingSample.description.toUpperCase()}"`
+      )
       setEditingSample(null)
     }
   }
 
   const handleDeleteSample = async (id: string) => {
+    const sampleToDelete = sampleDescriptions.find(s => s.id === id)
     const { error } = await supabase.from("sample_descriptions").delete().eq("id", id)
     if (!error) {
       setSampleDescriptions(sampleDescriptions.filter(s => s.id !== id))
+      if (sampleToDelete) {
+        await logAudit("DELETE", "sample_description", id, sampleToDelete.description, 
+          { description: sampleToDelete.description }, 
+          undefined, 
+          `Descripcion de muestra "${sampleToDelete.description}" eliminada`
+        )
+      }
     }
   }
 
