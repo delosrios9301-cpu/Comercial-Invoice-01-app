@@ -32,6 +32,8 @@ interface UserProfile {
   email: string
   full_name: string
   sede_id: string
+  is_admin: boolean
+  can_edit: boolean
 }
 
 export default function SettingsPage() {
@@ -90,6 +92,8 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const canModify = user?.is_admin || user?.can_edit
 
   // Study CRUD operations
   const handleAddStudy = async () => {
@@ -223,10 +227,12 @@ export default function SettingsPage() {
               <TabsContent value="studies" className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-medium">Estudios</h3>
-                  <Button size="sm" onClick={() => setShowNewStudy(true)}>
-                    <Plus className="mr-1 h-4 w-4" />
-                    Agregar Estudio
-                  </Button>
+                  {canModify && (
+                    <Button size="sm" onClick={() => setShowNewStudy(true)}>
+                      <Plus className="mr-1 h-4 w-4" />
+                      Agregar Estudio
+                    </Button>
+                  )}
                 </div>
 
                 {showNewStudy && (
@@ -348,12 +354,16 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => setEditingStudy(study)}>
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study.id)} className="text-red-500 hover:text-red-700">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canModify && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => setEditingStudy(study)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study.id)} className="text-red-500 hover:text-red-700">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -369,10 +379,12 @@ export default function SettingsPage() {
               <TabsContent value="samples" className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-medium">Descripciones de Muestras</h3>
-                  <Button size="sm" onClick={() => setShowNewSample(true)}>
-                    <Plus className="mr-1 h-4 w-4" />
-                    Agregar Descripcion
-                  </Button>
+                  {canModify && (
+                    <Button size="sm" onClick={() => setShowNewSample(true)}>
+                      <Plus className="mr-1 h-4 w-4" />
+                      Agregar Descripcion
+                    </Button>
+                  )}
                 </div>
 
                 {showNewSample && (
@@ -433,12 +445,16 @@ export default function SettingsPage() {
                             )}
                           </div>
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => setEditingSample(sample)}>
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample.id)} className="text-red-500 hover:text-red-700">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canModify && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => setEditingSample(sample)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample.id)} className="text-red-500 hover:text-red-700">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
