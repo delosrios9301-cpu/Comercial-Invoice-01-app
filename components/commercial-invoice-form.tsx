@@ -249,6 +249,45 @@ export default function CommercialInvoiceForm() {
     router.refresh()
   }
 
+  // Function to log audit events
+  const logAudit = async (
+    action: string,
+    entityType: string,
+    entityName: string,
+    description: string,
+    oldValue?: Record<string, unknown>,
+    newValue?: Record<string, unknown>
+  ) => {
+    try {
+      await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          entity_type: entityType,
+          entity_name: entityName,
+          description,
+          old_value: oldValue,
+          new_value: newValue,
+        }),
+      })
+    } catch (error) {
+      console.error("Error logging audit:", error)
+    }
+  }
+
+  // Reset form after PDF generation
+  const resetForm = () => {
+    setFormData(prev => ({
+      ...prev,
+      awb: "",
+      marks: "1",
+    }))
+    setSamples([{ description: sampleDescriptions[0] || "HUMAN BLOOD", qty: 0 }])
+    setExportDate(new Date())
+    setSignDate(new Date())
+  }
+
   const generatePDF = () => {
     const doc = new jsPDF({
       orientation: "portrait",
@@ -490,6 +529,27 @@ export default function CommercialInvoiceForm() {
     doc.text(signDateStr, margin + 80, declTop + 22)
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
+
+    // Log audit event
+    await logAudit(
+      "PDF_GENERATED",
+      "invoice",
+      selectedStudy?.name || "Invoice",
+      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras`,
+      undefined,
+      {
+        study: selectedStudy?.name,
+        awb: formData.awb,
+        total_qty: totalQty,
+        total_ml: totalMl,
+        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
+        export_date: exportDateStr,
+        sign_date: signDateStr,
+      }
+    )
+
+    // Reset form for new invoice
+    resetForm()
   }
 
   if (loading) {
