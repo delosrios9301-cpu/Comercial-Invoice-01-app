@@ -23,7 +23,6 @@ export default function SignUpPage() {
   const [sedes, setSedes] = useState<Sede[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -45,13 +44,10 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-          `${window.location.origin}/auth/callback`,
         data: {
           full_name: fullName,
           sede_id: sedeId,
@@ -62,31 +58,20 @@ export default function SignUpPage() {
     if (error) {
       setError(error.message)
       setLoading(false)
-    } else {
-      setSuccess(true)
+    } else if (data.user) {
+      // Sign in immediately after signup (no email confirmation needed)
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (signInError) {
+        setError(signInError.message)
+        setLoading(false)
+      } else {
+        router.push("/")
+        router.refresh()
+      }
     }
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Revisa tu correo</CardTitle>
-            <CardDescription>
-              Te hemos enviado un enlace de confirmacion a {email}
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Link href="/auth/login" className="w-full">
-              <Button variant="outline" className="w-full">
-                Volver al inicio de sesion
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-      </div>
-    )
   }
 
   return (
