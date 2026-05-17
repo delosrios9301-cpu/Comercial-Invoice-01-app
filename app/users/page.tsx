@@ -25,7 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Plus, Trash2, Shield, Edit, Users, Building2, ClipboardList } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Shield, Edit, Users, Building2 } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 
@@ -40,31 +40,7 @@ interface User {
   full_name: string
   is_admin: boolean
   can_edit: boolean
-  can_view_audit: boolean
   sedes: Sede[]
-}
-
-// Helper function to log audit
-async function logAudit(data: {
-  action: string
-  entity_type: string
-  entity_id?: string
-  entity_name?: string
-  sede_id?: string
-  sede_name?: string
-  old_data?: Record<string, unknown> | null
-  new_data?: Record<string, unknown> | null
-  description?: string
-}) {
-  try {
-    await fetch("/api/audit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-  } catch (error) {
-    console.error("Error logging audit:", error)
-  }
 }
 
 export default function UsersPage() {
@@ -75,7 +51,6 @@ export default function UsersPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [originalUser, setOriginalUser] = useState<User | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -85,12 +60,10 @@ export default function UsersPage() {
   const [newFullName, setNewFullName] = useState("")
   const [newSedeIds, setNewSedeIds] = useState<string[]>([])
   const [newCanEdit, setNewCanEdit] = useState(false)
-  const [newCanViewAudit, setNewCanViewAudit] = useState(false)
 
   // Edit user form
   const [editSedeIds, setEditSedeIds] = useState<string[]>([])
   const [editCanEdit, setEditCanEdit] = useState(false)
-  const [editCanViewAudit, setEditCanViewAudit] = useState(false)
   const [editIsAdmin, setEditIsAdmin] = useState(false)
   
   const router = useRouter()
@@ -171,7 +144,6 @@ export default function UsersPage() {
         fullName: newFullName,
         sedeIds: newSedeIds,
         canEdit: newCanEdit,
-        canViewAudit: newCanViewAudit,
       }),
     })
 
@@ -183,41 +155,27 @@ export default function UsersPage() {
       return
     }
 
-    // Log audit
-    const sedeNames = sedes.filter(s => newSedeIds.includes(s.id)).map(s => s.name).join(", ")
-    await logAudit({
-      action: "CREATE",
-      entity_type: "user",
-      entity_id: data.user?.id,
-      entity_name: newFullName,
-      description: `Usuario "${newFullName}" (${newEmail}) creado con acceso a: ${sedeNames}`,
-      new_data: { email: newEmail, fullName: newFullName, canEdit: newCanEdit, canViewAudit: newCanViewAudit, sedes: sedeNames },
-    })
-
     // Reset form and reload
     setNewEmail("")
     setNewPassword("")
     setNewFullName("")
     setNewSedeIds([])
     setNewCanEdit(false)
-    setNewCanViewAudit(false)
     setDialogOpen(false)
     setSaving(false)
     await loadUsers()
   }
 
   function openEditDialog(user: User) {
-    setOriginalUser({ ...user })
     setEditingUser(user)
     setEditSedeIds(user.sedes?.map(s => s.id) || [])
     setEditCanEdit(user.can_edit)
-    setEditCanViewAudit(user.can_view_audit || false)
     setEditIsAdmin(user.is_admin)
     setEditDialogOpen(true)
   }
 
   async function updateUser() {
-    if (!editingUser || !originalUser) return
+    if (!editingUser) return
 
     setSaving(true)
 
@@ -227,65 +185,29 @@ export default function UsersPage() {
       body: JSON.stringify({ 
         userId: editingUser.id, 
         canEdit: editCanEdit, 
-        canViewAudit: editCanViewAudit,
         isAdmin: editIsAdmin,
         sedeIds: editSedeIds
       }),
     })
 
     if (response.ok) {
-      // Log audit
-      const oldSedeNames = originalUser.sedes?.map(s => s.name).join(", ") || "Ninguna"
-      const newSedeNames = sedes.filter(s => editSedeIds.includes(s.id)).map(s => s.name).join(", ")
-      
-      await logAudit({
-        action: "UPDATE",
-        entity_type: "user",
-        entity_id: editingUser.id,
-        entity_name: editingUser.full_name,
-        description: `Permisos de usuario "${editingUser.full_name}" actualizados`,
-        old_data: { 
-          isAdmin: originalUser.is_admin, 
-          canEdit: originalUser.can_edit, 
-          canViewAudit: originalUser.can_view_audit,
-          sedes: oldSedeNames 
-        },
-        new_data: { 
-          isAdmin: editIsAdmin, 
-          canEdit: editCanEdit, 
-          canViewAudit: editCanViewAudit,
-          sedes: newSedeNames 
-        },
-      })
-
       setEditDialogOpen(false)
       setEditingUser(null)
-      setOriginalUser(null)
       await loadUsers()
     }
     setSaving(false)
   }
 
-  async function deleteUser(user: User) {
+  async function deleteUser(userId: string) {
     if (!confirm("Esta seguro de eliminar este usuario?")) return
 
     const response = await fetch("/api/users", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id }),
+      body: JSON.stringify({ userId }),
     })
 
     if (response.ok) {
-      // Log audit
-      await logAudit({
-        action: "DELETE",
-        entity_type: "user",
-        entity_id: user.id,
-        entity_name: user.full_name,
-        description: `Usuario "${user.full_name}" (${user.email}) eliminado`,
-        old_data: { email: user.email, fullName: user.full_name, isAdmin: user.is_admin, canEdit: user.can_edit },
-      })
-
       await loadUsers()
     }
   }
@@ -396,28 +318,15 @@ export default function UsersPage() {
                   </p>
                 </div>
                 
-                <div className="space-y-3">
-                  <Label>Permisos</Label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="canEdit"
-                      checked={newCanEdit}
-                      onCheckedChange={(checked) => setNewCanEdit(checked as boolean)}
-                    />
-                    <Label htmlFor="canEdit" className="cursor-pointer">
-                      Puede editar configuraciones
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="canViewAudit"
-                      checked={newCanViewAudit}
-                      onCheckedChange={(checked) => setNewCanViewAudit(checked as boolean)}
-                    />
-                    <Label htmlFor="canViewAudit" className="cursor-pointer">
-                      Puede ver auditoria
-                    </Label>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="canEdit"
+                    checked={newCanEdit}
+                    onCheckedChange={(checked) => setNewCanEdit(checked as boolean)}
+                  />
+                  <Label htmlFor="canEdit" className="cursor-pointer">
+                    Puede editar configuraciones (estudios, muestras)
+                  </Label>
                 </div>
               </div>
               
@@ -448,8 +357,7 @@ export default function UsersPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Sedes</TableHead>
                   <TableHead className="text-center">Admin</TableHead>
-                  <TableHead className="text-center">Editar</TableHead>
-                  <TableHead className="text-center">Auditoria</TableHead>
+                  <TableHead className="text-center">Puede Editar</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -485,13 +393,6 @@ export default function UsersPage() {
                         <span className="text-muted-foreground">No</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {user.can_view_audit ? (
-                        <Badge className="bg-green-100 text-green-700">Si</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">No</span>
-                      )}
-                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -504,7 +405,7 @@ export default function UsersPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => deleteUser(user)}
+                          onClick={() => deleteUser(user.id)}
                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -515,7 +416,7 @@ export default function UsersPage() {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       No hay usuarios registrados
                     </TableCell>
                   </TableRow>
@@ -576,16 +477,6 @@ export default function UsersPage() {
                     Puede editar configuraciones
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="editCanViewAudit"
-                    checked={editCanViewAudit}
-                    onCheckedChange={(checked) => setEditCanViewAudit(checked as boolean)}
-                  />
-                  <Label htmlFor="editCanViewAudit" className="cursor-pointer">
-                    Puede ver auditoria
-                  </Label>
-                </div>
               </div>
             </div>
             
@@ -625,16 +516,7 @@ export default function UsersPage() {
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
-              <ClipboardList className="h-5 w-5 text-green-500 mt-0.5" />
-              <div>
-                <p className="font-medium">Ver Auditoria</p>
-                <p className="text-sm text-muted-foreground">
-                  Puede ver el registro de auditoria con todos los cambios realizados en el sistema.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
-              <Building2 className="h-5 w-5 text-orange-500 mt-0.5" />
+              <Building2 className="h-5 w-5 text-green-500 mt-0.5" />
               <div>
                 <p className="font-medium">Multiples Sedes</p>
                 <p className="text-sm text-muted-foreground">

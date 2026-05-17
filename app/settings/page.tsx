@@ -48,50 +48,24 @@ interface UserProfile {
   can_edit: boolean
 }
 
-// Helper function to log audit
-async function logAudit(data: {
-  action: string
-  entity_type: string
-  entity_id?: string
-  entity_name?: string
-  sede_id?: string
-  sede_name?: string
-  old_data?: Record<string, unknown> | null
-  new_data?: Record<string, unknown> | null
-  description?: string
-}) {
-  try {
-    await fetch("/api/audit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-  } catch (error) {
-    console.error("Error logging audit:", error)
-  }
-}
-
 export default function SettingsPage() {
   const router = useRouter()
   const supabase = createClient()
   
   const [user, setUser] = useState<UserProfile | null>(null)
   const [userSedes, setUserSedes] = useState<Sede[]>([])
-  const [allSedes, setAllSedes] = useState<Sede[]>([])
   const [selectedSedeId, setSelectedSedeId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   
   // Studies state
   const [studies, setStudies] = useState<Study[]>([])
   const [editingStudy, setEditingStudy] = useState<Study | null>(null)
-  const [originalStudy, setOriginalStudy] = useState<Study | null>(null)
   const [newStudy, setNewStudy] = useState({ name: "", protocol: "", shipper_address: "", consignee_address: "" })
   const [showNewStudy, setShowNewStudy] = useState(false)
   
   // Sample descriptions state
   const [sampleDescriptions, setSampleDescriptions] = useState<SampleDescription[]>([])
   const [editingSample, setEditingSample] = useState<SampleDescription | null>(null)
-  const [originalSample, setOriginalSample] = useState<SampleDescription | null>(null)
   const [newSampleDesc, setNewSampleDesc] = useState("")
   const [showNewSample, setShowNewSample] = useState(false)
 
@@ -110,10 +84,6 @@ export default function SettingsPage() {
         .eq("id", authUser.id)
         .single()
 
-      // Fetch all sedes for reference
-      const { data: sedesData } = await supabase.from("sedes").select("id, name")
-      if (sedesData) setAllSedes(sedesData)
-
       if (profile) {
         setUser(profile)
 
@@ -131,7 +101,7 @@ export default function SettingsPage() {
           setSelectedSedeId(sedes[0].id)
         }
 
-        // For admin, fetch all data; for regular users, fetch based on assigned sedes
+        // For admin, fetch all data; for regular users, we'll fetch based on selected sede
         if (profile.is_admin) {
           const [studiesRes, samplesRes] = await Promise.all([
             supabase.from("studies").select("*"),
@@ -162,10 +132,6 @@ export default function SettingsPage() {
 
   const canModify = user?.is_admin || user?.can_edit
 
-  const getSedeName = (sedeId: string) => {
-    return allSedes.find(s => s.id === sedeId)?.name || "Sede desconocida"
-  }
-
   // Study CRUD operations
   const handleAddStudy = async () => {
     if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) return
@@ -187,26 +153,13 @@ export default function SettingsPage() {
 
     if (!error && data) {
       setStudies([...studies, data])
-      
-      // Log audit
-      await logAudit({
-        action: "CREATE",
-        entity_type: "study",
-        entity_id: data.id,
-        entity_name: data.name,
-        sede_id: sedeId,
-        sede_name: getSedeName(sedeId),
-        new_data: data,
-        description: `Estudio "${data.name}" creado`,
-      })
-      
       setNewStudy({ name: "", protocol: "", shipper_address: "", consignee_address: "" })
       setShowNewStudy(false)
     }
   }
 
   const handleUpdateStudy = async () => {
-    if (!editingStudy || !originalStudy) return
+    if (!editingStudy) return
 
     const { error } = await supabase
       .from("studies")
@@ -219,41 +172,15 @@ export default function SettingsPage() {
       .eq("id", editingStudy.id)
 
     if (!error) {
-      // Log audit
-      await logAudit({
-        action: "UPDATE",
-        entity_type: "study",
-        entity_id: editingStudy.id,
-        entity_name: editingStudy.name,
-        sede_id: editingStudy.sede_id,
-        sede_name: getSedeName(editingStudy.sede_id),
-        old_data: originalStudy as unknown as Record<string, unknown>,
-        new_data: editingStudy as unknown as Record<string, unknown>,
-        description: `Estudio "${editingStudy.name}" actualizado`,
-      })
-      
       setStudies(studies.map(s => s.id === editingStudy.id ? editingStudy : s))
       setEditingStudy(null)
-      setOriginalStudy(null)
     }
   }
 
-  const handleDeleteStudy = async (study: Study) => {
-    const { error } = await supabase.from("studies").delete().eq("id", study.id)
+  const handleDeleteStudy = async (id: string) => {
+    const { error } = await supabase.from("studies").delete().eq("id", id)
     if (!error) {
-      // Log audit
-      await logAudit({
-        action: "DELETE",
-        entity_type: "study",
-        entity_id: study.id,
-        entity_name: study.name,
-        sede_id: study.sede_id,
-        sede_name: getSedeName(study.sede_id),
-        old_data: study as unknown as Record<string, unknown>,
-        description: `Estudio "${study.name}" eliminado`,
-      })
-      
-      setStudies(studies.filter(s => s.id !== study.id))
+      setStudies(studies.filter(s => s.id !== id))
     }
   }
 
@@ -274,18 +201,6 @@ export default function SettingsPage() {
       .single()
 
     if (!error && data) {
-      // Log audit
-      await logAudit({
-        action: "CREATE",
-        entity_type: "sample_description",
-        entity_id: data.id,
-        entity_name: data.description,
-        sede_id: sedeId,
-        sede_name: getSedeName(sedeId),
-        new_data: data,
-        description: `Descripcion de muestra "${data.description}" creada`,
-      })
-      
       setSampleDescriptions([...sampleDescriptions, data])
       setNewSampleDesc("")
       setShowNewSample(false)
@@ -293,66 +208,28 @@ export default function SettingsPage() {
   }
 
   const handleUpdateSample = async () => {
-    if (!editingSample || !originalSample) return
+    if (!editingSample) return
 
-    const updatedDescription = editingSample.description.toUpperCase()
-    
     const { error } = await supabase
       .from("sample_descriptions")
       .update({
-        description: updatedDescription,
+        description: editingSample.description.toUpperCase(),
       })
       .eq("id", editingSample.id)
 
     if (!error) {
-      // Log audit
-      await logAudit({
-        action: "UPDATE",
-        entity_type: "sample_description",
-        entity_id: editingSample.id,
-        entity_name: updatedDescription,
-        sede_id: editingSample.sede_id,
-        sede_name: getSedeName(editingSample.sede_id),
-        old_data: originalSample as unknown as Record<string, unknown>,
-        new_data: { ...editingSample, description: updatedDescription } as unknown as Record<string, unknown>,
-        description: `Descripcion de muestra actualizada de "${originalSample.description}" a "${updatedDescription}"`,
-      })
-      
       setSampleDescriptions(sampleDescriptions.map(s => 
-        s.id === editingSample.id ? { ...s, description: updatedDescription } : s
+        s.id === editingSample.id ? { ...s, description: editingSample.description.toUpperCase() } : s
       ))
       setEditingSample(null)
-      setOriginalSample(null)
     }
   }
 
-  const handleDeleteSample = async (sample: SampleDescription) => {
-    const { error } = await supabase.from("sample_descriptions").delete().eq("id", sample.id)
+  const handleDeleteSample = async (id: string) => {
+    const { error } = await supabase.from("sample_descriptions").delete().eq("id", id)
     if (!error) {
-      // Log audit
-      await logAudit({
-        action: "DELETE",
-        entity_type: "sample_description",
-        entity_id: sample.id,
-        entity_name: sample.description,
-        sede_id: sample.sede_id,
-        sede_name: getSedeName(sample.sede_id),
-        old_data: sample as unknown as Record<string, unknown>,
-        description: `Descripcion de muestra "${sample.description}" eliminada`,
-      })
-      
-      setSampleDescriptions(sampleDescriptions.filter(s => s.id !== sample.id))
+      setSampleDescriptions(sampleDescriptions.filter(s => s.id !== id))
     }
-  }
-
-  const startEditingStudy = (study: Study) => {
-    setOriginalStudy({ ...study })
-    setEditingStudy(study)
-  }
-
-  const startEditingSample = (sample: SampleDescription) => {
-    setOriginalSample({ ...sample })
-    setEditingSample(sample)
   }
 
   if (loading) {
@@ -515,10 +392,7 @@ export default function SettingsPage() {
                               <Save className="mr-1 h-4 w-4" />
                               Guardar
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => {
-                              setEditingStudy(null)
-                              setOriginalStudy(null)
-                            }}>
+                            <Button size="sm" variant="outline" onClick={() => setEditingStudy(null)}>
                               <X className="mr-1 h-4 w-4" />
                               Cancelar
                             </Button>
@@ -527,10 +401,7 @@ export default function SettingsPage() {
                       ) : (
                         <div className="flex justify-between items-start">
                           <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold">{study.name}</p>
-                              <span className="text-xs px-2 py-0.5 bg-muted rounded">{getSedeName(study.sede_id)}</span>
-                            </div>
+                            <p className="font-semibold">{study.name}</p>
                             <p className="text-sm text-muted-foreground">{study.protocol}</p>
                             <div className="grid gap-2 mt-3">
                               <div>
@@ -548,10 +419,10 @@ export default function SettingsPage() {
                           <div className="flex gap-1">
                             {canModify && (
                               <>
-                                <Button variant="ghost" size="sm" onClick={() => startEditingStudy(study)}>
+                                <Button variant="ghost" size="sm" onClick={() => setEditingStudy(study)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study)} className="text-red-500 hover:text-red-700">
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study.id)} className="text-red-500 hover:text-red-700">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </>
@@ -620,31 +491,29 @@ export default function SettingsPage() {
                           <Button size="sm" onClick={handleUpdateSample}>
                             <Save className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => {
-                            setEditingSample(null)
-                            setOriginalSample(null)
-                          }}>
+                          <Button size="sm" variant="outline" onClick={() => setEditingSample(null)}>
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
                       ) : (
                         <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
+                          <div>
                             <span className="font-medium">{sample.description}</span>
-                            <span className="text-xs px-2 py-0.5 bg-muted rounded">{getSedeName(sample.sede_id)}</span>
                             {(sample.description.toLowerCase().includes("nasal") || 
                               sample.description.toLowerCase().includes("swab") ||
                               sample.description.toLowerCase().includes("hisopado")) && (
-                              <span className="text-xs text-blue-500">(x3 ML/gm)</span>
+                              <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                x3 ML/gm
+                              </span>
                             )}
                           </div>
                           <div className="flex gap-1">
                             {canModify && (
                               <>
-                                <Button variant="ghost" size="sm" onClick={() => startEditingSample(sample)}>
+                                <Button variant="ghost" size="sm" onClick={() => setEditingSample(sample)}>
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample)} className="text-red-500 hover:text-red-700">
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample.id)} className="text-red-500 hover:text-red-700">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </>
