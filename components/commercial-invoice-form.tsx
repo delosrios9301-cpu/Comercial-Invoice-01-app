@@ -288,7 +288,7 @@ export default function CommercialInvoiceForm() {
     setSignDate(new Date())
   }
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
