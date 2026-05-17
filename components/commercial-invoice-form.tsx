@@ -538,12 +538,14 @@ export default function CommercialInvoiceForm() {
                   </Button>
                 </Link>
               )}
-              <Link href="/settings">
-                <Button variant="outline" size="sm">
-                  <Settings className="mr-1 h-4 w-4" />
-                  Configuracion
-                </Button>
-              </Link>
+              {user?.is_admin && (
+                <Link href="/settings">
+                  <Button variant="outline" size="sm">
+                    <Settings className="mr-1 h-4 w-4" />
+                    Configuracion
+                  </Button>
+                </Link>
+              )}
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="mr-1 h-4 w-4" />
                 Cerrar Sesion

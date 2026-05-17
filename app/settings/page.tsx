@@ -53,7 +53,7 @@ export default function SettingsPage() {
   const supabase = createClient()
   
   const [user, setUser] = useState<UserProfile | null>(null)
-  const [userSedes, setUserSedes] = useState<Sede[]>([])
+  const [allSedes, setAllSedes] = useState<Sede[]>([])
   const [selectedSedeId, setSelectedSedeId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   
@@ -87,51 +87,29 @@ export default function SettingsPage() {
       if (profile) {
         setUser(profile)
 
-        // Get user's assigned sedes - fetch separately to ensure correct data
-        const { data: userSedesData, error: sedesError } = await supabase
-          .from("user_sedes")
-          .select("sede_id")
-          .eq("user_id", authUser.id)
+        // Only admin can access this page
+        if (!profile.is_admin) {
+          router.push("/")
+          return
+        }
 
-        console.log("[v0] userSedesData:", userSedesData, "error:", sedesError)
+        // Admin gets ALL sedes
+        const { data: sedesData } = await supabase
+          .from("sedes")
+          .select("id, name")
+          .order("name")
 
-        if (userSedesData && userSedesData.length > 0) {
-          // Get full sede info
-          const sedeIds = userSedesData.map(us => us.sede_id)
-          const { data: sedesInfo } = await supabase
-            .from("sedes")
-            .select("id, name")
-            .in("id", sedeIds)
+        if (sedesData && sedesData.length > 0) {
+          setAllSedes(sedesData)
+          setSelectedSedeId(sedesData[0].id)
 
-          console.log("[v0] sedesInfo:", sedesInfo)
-
-          const sedes = sedesInfo || []
-          setUserSedes(sedes)
-
-          // Set default selected sede
-          if (sedes.length > 0) {
-            setSelectedSedeId(sedes[0].id)
-            console.log("[v0] Selected sede:", sedes[0].id, sedes[0].name)
-          }
-
-          // Fetch studies and samples for user's sedes
-          if (profile.is_admin) {
-            const [studiesRes, samplesRes] = await Promise.all([
-              supabase.from("studies").select("*"),
-              supabase.from("sample_descriptions").select("*"),
-            ])
-            if (studiesRes.data) setStudies(studiesRes.data)
-            if (samplesRes.data) setSampleDescriptions(samplesRes.data)
-          } else {
-            const [studiesRes, samplesRes] = await Promise.all([
-              supabase.from("studies").select("*").in("sede_id", sedeIds),
-              supabase.from("sample_descriptions").select("*").in("sede_id", sedeIds),
-            ])
-            console.log("[v0] Studies fetch:", studiesRes)
-            console.log("[v0] Samples fetch:", samplesRes)
-            if (studiesRes.data) setStudies(studiesRes.data)
-            if (samplesRes.data) setSampleDescriptions(samplesRes.data)
-          }
+          // Fetch all studies and samples
+          const [studiesRes, samplesRes] = await Promise.all([
+            supabase.from("studies").select("*"),
+            supabase.from("sample_descriptions").select("*"),
+          ])
+          if (studiesRes.data) setStudies(studiesRes.data)
+          if (samplesRes.data) setSampleDescriptions(samplesRes.data)
         }
       }
     } catch (error) {
@@ -145,8 +123,6 @@ export default function SettingsPage() {
     fetchData()
   }, [fetchData])
 
-  const canModify = user?.is_admin || user?.can_edit
-
   // Function to log audit changes
   const logAudit = async (
     action: string, 
@@ -157,15 +133,14 @@ export default function SettingsPage() {
     newValue?: Record<string, unknown>,
     description?: string
   ) => {
-    const sedeId = selectedSedeId || userSedes[0]?.id
-    const sedeName = userSedes.find(s => s.id === sedeId)?.name
+    const sedeName = allSedes.find(s => s.id === selectedSedeId)?.name
 
     try {
       await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sede_id: sedeId,
+          sede_id: selectedSedeId,
           sede_name: sedeName,
           action,
           entity_type: entityType,
@@ -181,25 +156,20 @@ export default function SettingsPage() {
     }
   }
 
+  // Filter studies and samples by selected sede
+  const filteredStudies = studies.filter(s => s.sede_id === selectedSedeId)
+  const filteredSamples = sampleDescriptions.filter(s => s.sede_id === selectedSedeId)
+
   // Study CRUD operations
   const handleAddStudy = async () => {
-    if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) {
-      console.log("[v0] Missing required fields for study")
+    if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address || !selectedSedeId) {
       return
     }
-    
-    const sedeId = selectedSedeId || userSedes[0]?.id
-    if (!sedeId) {
-      console.log("[v0] No sede ID available")
-      return
-    }
-
-    console.log("[v0] Adding study with sedeId:", sedeId)
 
     const { data, error } = await supabase
       .from("studies")
       .insert({
-        sede_id: sedeId,
+        sede_id: selectedSedeId,
         name: newStudy.name,
         protocol: newStudy.protocol,
         shipper_address: newStudy.shipper_address,
@@ -207,8 +177,6 @@ export default function SettingsPage() {
       })
       .select()
       .single()
-
-    console.log("[v0] Add study result - data:", data, "error:", error)
 
     if (!error && data) {
       setStudies([...studies, data])
@@ -221,7 +189,6 @@ export default function SettingsPage() {
       setNewStudy({ name: "", protocol: "", shipper_address: "", consignee_address: "" })
       setShowNewStudy(false)
     } else if (error) {
-      console.log("[v0] Error adding study:", error.message, error.details, error.hint)
       alert(`Error al guardar: ${error.message}`)
     }
   }
@@ -280,29 +247,18 @@ export default function SettingsPage() {
 
   // Sample description CRUD operations
   const handleAddSample = async () => {
-    if (!user || !newSampleDesc.trim()) {
-      console.log("[v0] Missing required fields for sample")
+    if (!user || !newSampleDesc.trim() || !selectedSedeId) {
       return
     }
-    
-    const sedeId = selectedSedeId || userSedes[0]?.id
-    if (!sedeId) {
-      console.log("[v0] No sede ID available for sample")
-      return
-    }
-
-    console.log("[v0] Adding sample with sedeId:", sedeId)
 
     const { data, error } = await supabase
       .from("sample_descriptions")
       .insert({
-        sede_id: sedeId,
+        sede_id: selectedSedeId,
         description: newSampleDesc.trim().toUpperCase(),
       })
       .select()
       .single()
-
-    console.log("[v0] Add sample result - data:", data, "error:", error)
 
     if (!error && data) {
       setSampleDescriptions([...sampleDescriptions, data])
@@ -312,7 +268,6 @@ export default function SettingsPage() {
       setNewSampleDesc("")
       setShowNewSample(false)
     } else if (error) {
-      console.log("[v0] Error adding sample:", error.message, error.details, error.hint)
       alert(`Error al guardar: ${error.message}`)
     }
   }
@@ -365,6 +320,19 @@ export default function SettingsPage() {
     )
   }
 
+  if (!user?.is_admin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/50">
+        <Card className="p-6">
+          <p className="text-center">Solo el administrador puede acceder a esta pagina.</p>
+          <Link href="/" className="block mt-4">
+            <Button className="w-full">Volver al inicio</Button>
+          </Link>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-muted/50 p-4 md:p-8">
       <div className="mx-auto max-w-4xl">
@@ -379,55 +347,44 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Configuracion</CardTitle>
+            <CardTitle className="text-2xl">Configuracion de Sedes</CardTitle>
             <CardDescription>
-              Gestiona los estudios y descripciones de muestras
+              Gestiona los estudios y descripciones de muestras para cada sede
             </CardDescription>
             
-            {/* Sede Selector - show even for single sede */}
-            {userSedes.length > 0 && (
-              <div className="mt-4 flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <Label className="text-sm">Sede:</Label>
-                {userSedes.length === 1 ? (
-                  <span className="font-medium">{userSedes[0].name}</span>
-                ) : (
-                  <Select value={selectedSedeId} onValueChange={setSelectedSedeId}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Seleccionar sede" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {userSedes.map((sede) => (
-                        <SelectItem key={sede.id} value={sede.id}>
-                          {sede.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
-            {userSedes.length === 0 && (
-              <p className="mt-4 text-sm text-red-500">No tienes sedes asignadas. Contacta al administrador.</p>
-            )}
+            {/* Sede Selector */}
+            <div className="mt-4 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm">Seleccionar Sede:</Label>
+              <Select value={selectedSedeId} onValueChange={setSelectedSedeId}>
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Seleccionar sede" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allSedes.map((sede) => (
+                    <SelectItem key={sede.id} value={sede.id}>
+                      {sede.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="studies">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="studies">Estudios</TabsTrigger>
-                <TabsTrigger value="samples">Muestras</TabsTrigger>
+                <TabsTrigger value="studies">Estudios ({filteredStudies.length})</TabsTrigger>
+                <TabsTrigger value="samples">Muestras ({filteredSamples.length})</TabsTrigger>
               </TabsList>
 
               {/* Studies Tab */}
               <TabsContent value="studies" className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Estudios</h3>
-                  {canModify && (
-                    <Button size="sm" onClick={() => setShowNewStudy(true)}>
-                      <Plus className="mr-1 h-4 w-4" />
-                      Agregar Estudio
-                    </Button>
-                  )}
+                  <h3 className="text-lg font-medium">Estudios de {allSedes.find(s => s.id === selectedSedeId)?.name}</h3>
+                  <Button size="sm" onClick={() => setShowNewStudy(true)}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Agregar Estudio
+                  </Button>
                 </div>
 
                 {showNewStudy && (
@@ -485,87 +442,84 @@ export default function SettingsPage() {
                 )}
 
                 <div className="space-y-3">
-                  {studies.map((study) => (
-                    <Card key={study.id} className="p-4">
-                      {editingStudy?.id === study.id ? (
-                        <div className="space-y-3">
-                          <div>
-                            <Label>Nombre del estudio</Label>
-                            <Input
-                              value={editingStudy.name}
-                              onChange={(e) => setEditingStudy({ ...editingStudy, name: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <Label>Protocolo</Label>
-                            <Input
-                              value={editingStudy.protocol}
-                              onChange={(e) => setEditingStudy({ ...editingStudy, protocol: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <Label>Direccion del Shipper</Label>
-                            <Textarea
-                              value={editingStudy.shipper_address}
-                              onChange={(e) => setEditingStudy({ ...editingStudy, shipper_address: e.target.value })}
-                              className="min-h-[100px]"
-                            />
-                          </div>
-                          <div>
-                            <Label>Direccion del Consignee</Label>
-                            <Textarea
-                              value={editingStudy.consignee_address || ""}
-                              onChange={(e) => setEditingStudy({ ...editingStudy, consignee_address: e.target.value })}
-                              className="min-h-[100px]"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleUpdateStudy}>
-                              <Save className="mr-1 h-4 w-4" />
-                              Guardar
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setEditingStudy(null)}>
-                              <X className="mr-1 h-4 w-4" />
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1 space-y-2">
-                            <p className="font-semibold">{study.name}</p>
-                            <p className="text-sm text-muted-foreground">{study.protocol}</p>
-                            <div className="grid gap-2 mt-3">
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground">Shipper:</p>
-                                <p className="text-xs whitespace-pre-line">{study.shipper_address}</p>
-                              </div>
-                              {study.consignee_address && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground">Consignee:</p>
-                                  <p className="text-xs whitespace-pre-line">{study.consignee_address}</p>
-                                </div>
-                              )}
+                  {filteredStudies.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No hay estudios configurados para esta sede</p>
+                  ) : (
+                    filteredStudies.map((study) => (
+                      <Card key={study.id} className="p-4">
+                        {editingStudy?.id === study.id ? (
+                          <div className="space-y-3">
+                            <div>
+                              <Label>Nombre del estudio</Label>
+                              <Input
+                                value={editingStudy.name}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, name: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <Label>Protocolo</Label>
+                              <Input
+                                value={editingStudy.protocol}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, protocol: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <Label>Direccion del Shipper</Label>
+                              <Textarea
+                                value={editingStudy.shipper_address}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, shipper_address: e.target.value })}
+                                className="min-h-[100px]"
+                              />
+                            </div>
+                            <div>
+                              <Label>Direccion del Consignee</Label>
+                              <Textarea
+                                value={editingStudy.consignee_address || ""}
+                                onChange={(e) => setEditingStudy({ ...editingStudy, consignee_address: e.target.value })}
+                                className="min-h-[100px]"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleUpdateStudy}>
+                                <Save className="mr-1 h-4 w-4" />
+                                Guardar
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => setEditingStudy(null)}>
+                                <X className="mr-1 h-4 w-4" />
+                                Cancelar
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex gap-1">
-                            {canModify && (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={() => setEditingStudy(study)}>
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study.id)} className="text-red-500 hover:text-red-700">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
+                        ) : (
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1 space-y-2">
+                              <p className="font-semibold">{study.name}</p>
+                              <p className="text-sm text-muted-foreground">{study.protocol}</p>
+                              <div className="grid gap-2 mt-3">
+                                <div>
+                                  <p className="text-xs font-medium text-muted-foreground">SHIPPER:</p>
+                                  <p className="text-sm whitespace-pre-line">{study.shipper_address}</p>
+                                </div>
+                                {study.consignee_address && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground">CONSIGNEE:</p>
+                                    <p className="text-sm whitespace-pre-line">{study.consignee_address}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => setEditingStudy(study)}>
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteStudy(study.id)} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </Card>
-                  ))}
-                  {studies.length === 0 && !showNewStudy && (
-                    <p className="text-center text-muted-foreground py-8">No hay estudios configurados</p>
+                        )}
+                      </Card>
+                    ))
                   )}
                 </div>
               </TabsContent>
@@ -573,26 +527,24 @@ export default function SettingsPage() {
               {/* Sample Descriptions Tab */}
               <TabsContent value="samples" className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Descripciones de Muestras</h3>
-                  {canModify && (
-                    <Button size="sm" onClick={() => setShowNewSample(true)}>
-                      <Plus className="mr-1 h-4 w-4" />
-                      Agregar Descripcion
-                    </Button>
-                  )}
+                  <h3 className="text-lg font-medium">Descripciones de Muestras de {allSedes.find(s => s.id === selectedSedeId)?.name}</h3>
+                  <Button size="sm" onClick={() => setShowNewSample(true)}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Agregar Descripcion
+                  </Button>
                 </div>
 
                 {showNewSample && (
                   <Card className="p-4 bg-muted/50">
                     <div className="space-y-3">
-                      <Input
-                        placeholder="Descripcion de muestra (ej: HUMAN BLOOD, NASAL SWAB)"
-                        value={newSampleDesc}
-                        onChange={(e) => setNewSampleDesc(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Nota: Las muestras que contengan &quot;NASAL&quot;, &quot;SWAB&quot; o &quot;HISOPADO&quot; en el nombre multiplicaran la cantidad por 3 en el calculo de ML/gm
-                      </p>
+                      <div>
+                        <Label>Descripcion de la muestra</Label>
+                        <Input
+                          placeholder="Ej: HUMAN BLOOD, SWAB, PLASMA..."
+                          value={newSampleDesc}
+                          onChange={(e) => setNewSampleDesc(e.target.value)}
+                        />
+                      </div>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={handleAddSample}>
                           <Save className="mr-1 h-4 w-4" />
@@ -611,52 +563,40 @@ export default function SettingsPage() {
                 )}
 
                 <div className="space-y-2">
-                  {sampleDescriptions.map((sample) => (
-                    <Card key={sample.id} className="p-3">
-                      {editingSample?.id === sample.id ? (
-                        <div className="flex gap-2">
-                          <Input
-                            value={editingSample.description}
-                            onChange={(e) => setEditingSample({ ...editingSample, description: e.target.value })}
-                            className="flex-1"
-                          />
-                          <Button size="sm" onClick={handleUpdateSample}>
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingSample(null)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span className="font-medium">{sample.description}</span>
-                            {(sample.description.toLowerCase().includes("nasal") || 
-                              sample.description.toLowerCase().includes("swab") ||
-                              sample.description.toLowerCase().includes("hisopado")) && (
-                              <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                                x3 ML/gm
-                              </span>
-                            )}
+                  {filteredSamples.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No hay descripciones de muestras configuradas para esta sede</p>
+                  ) : (
+                    filteredSamples.map((sample) => (
+                      <Card key={sample.id} className="p-3">
+                        {editingSample?.id === sample.id ? (
+                          <div className="flex gap-2">
+                            <Input
+                              value={editingSample.description}
+                              onChange={(e) => setEditingSample({ ...editingSample, description: e.target.value })}
+                              className="flex-1"
+                            />
+                            <Button size="sm" onClick={handleUpdateSample}>
+                              <Save className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditingSample(null)}>
+                              <X className="h-4 w-4" />
+                            </Button>
                           </div>
-                          <div className="flex gap-1">
-                            {canModify && (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={() => setEditingSample(sample)}>
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample.id)} className="text-red-500 hover:text-red-700">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
+                        ) : (
+                          <div className="flex justify-between items-center">
+                            <p className="font-medium">{sample.description}</p>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => setEditingSample(sample)}>
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteSample(sample.id)} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </Card>
-                  ))}
-                  {sampleDescriptions.length === 0 && !showNewSample && (
-                    <p className="text-center text-muted-foreground py-8">No hay descripciones de muestras configuradas</p>
+                        )}
+                      </Card>
+                    ))
                   )}
                 </div>
               </TabsContent>
