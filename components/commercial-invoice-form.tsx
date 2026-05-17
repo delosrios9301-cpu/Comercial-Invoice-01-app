@@ -42,12 +42,7 @@ interface Study {
   name: string
   protocol: string
   shipper_address: string
-}
-
-interface Consignee {
-  id: string
-  name: string
-  address: string
+  consignee_address: string | null
 }
 
 interface UserProfile {
@@ -70,12 +65,10 @@ export default function CommercialInvoiceForm() {
   
   // Data from database
   const [studies, setStudies] = useState<Study[]>([])
-  const [consignees, setConsignees] = useState<Consignee[]>([])
   const [sampleDescriptions, setSampleDescriptions] = useState<string[]>([])
   
   // Selected items
   const [selectedStudyId, setSelectedStudyId] = useState<string>("")
-  const [selectedConsigneeId, setSelectedConsigneeId] = useState<string>("")
   
   // Date states with Calendar
   const [exportDate, setExportDate] = useState<Date>(new Date())
@@ -89,8 +82,7 @@ export default function CommercialInvoiceForm() {
     protocol: "",
     marks: "1",
     shippername: "",
-    ambientChecked: false,
-    dryIceChecked: true,
+    shipmentTemp: "dryice" as "ambient" | "dryice",
   })
 
   const [samples, setSamples] = useState<SampleRow[]>([
@@ -130,22 +122,8 @@ export default function CommercialInvoiceForm() {
           setFormData(prev => ({
             ...prev,
             shipper: studiesData[0].shipper_address,
+            consignee: studiesData[0].consignee_address || "",
             protocol: studiesData[0].protocol,
-          }))
-        }
-
-        // Fetch consignees for user's sede
-        const { data: consigneesData } = await supabase
-          .from("consignees")
-          .select("*")
-          .eq("sede_id", profile.sede_id)
-
-        if (consigneesData && consigneesData.length > 0) {
-          setConsignees(consigneesData)
-          setSelectedConsigneeId(consigneesData[0].id)
-          setFormData(prev => ({
-            ...prev,
-            consignee: consigneesData[0].address,
           }))
         }
 
@@ -180,7 +158,7 @@ export default function CommercialInvoiceForm() {
     return `${day} ${month} ${year}`
   }
 
-  // Handle study change - auto update shipper and protocol
+  // Handle study change - auto update shipper, consignee and protocol
   const handleStudyChange = (studyId: string) => {
     setSelectedStudyId(studyId)
     const study = studies.find(s => s.id === studyId)
@@ -188,27 +166,16 @@ export default function CommercialInvoiceForm() {
       setFormData(prev => ({
         ...prev,
         shipper: study.shipper_address,
+        consignee: study.consignee_address || "",
         protocol: study.protocol,
       }))
     }
   }
 
-  // Handle consignee change
-  const handleConsigneeChange = (consigneeId: string) => {
-    setSelectedConsigneeId(consigneeId)
-    const consignee = consignees.find(c => c.id === consigneeId)
-    if (consignee) {
-      setFormData(prev => ({
-        ...prev,
-        consignee: consignee.address,
-      }))
-    }
-  }
-
-  // Calculate ML/gm for a single row
+  // Calculate ML/gm for a single row - SWAB/HISOPADO multiplies by 3
   const calculateMl = (sample: SampleRow): number => {
     const name = sample.description.toLowerCase()
-    if (name.includes("nasal")) {
+    if (name.includes("nasal") || name.includes("swab") || name.includes("hisopado")) {
       return sample.qty * 3
     }
     return sample.qty
@@ -228,10 +195,10 @@ export default function CommercialInvoiceForm() {
     })
   }
 
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTempChange = (value: "ambient" | "dryice") => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.checked,
+      shipmentTemp: value,
     })
   }
 
@@ -391,20 +358,23 @@ export default function CommercialInvoiceForm() {
     doc.text("URGENT LABORATORY SPECIMEN SHIPMENT", col3 + 2, descY)
     descY += 5
 
-    // Temperature indicators
+    // Shipment Temperature
     doc.setFont("courier", "normal")
+    doc.text("Shipment Temperature:", col3 + 2, descY)
+    descY += 4
+
     const ambientX = col3 + 2
     const dryIceX = col3 + 35
 
     doc.text("Ambient", ambientX, descY)
     doc.rect(ambientX + 18, descY - 3, 4, 4)
-    if (formData.ambientChecked) {
+    if (formData.shipmentTemp === "ambient") {
       doc.text("X", ambientX + 19, descY)
     }
 
     doc.text("DRY ICE", dryIceX, descY)
     doc.rect(dryIceX + 18, descY - 3, 4, 4)
-    if (formData.dryIceChecked) {
+    if (formData.shipmentTemp === "dryice") {
       doc.text("X", dryIceX + 19, descY)
     }
 
@@ -492,13 +462,12 @@ export default function CommercialInvoiceForm() {
 
     doc.setFont("courier", "normal")
     doc.setFontSize(6)
-    doc.text("Shipper's signature/ Exporter", margin + 2, declTop + 15)
-    doc.text("Date", margin + 50, declTop + 15)
-    doc.text("Name and title", margin + 75, declTop + 15)
+    doc.text("Shipper Signature/Exporter Name", margin + 2, declTop + 15)
+    doc.text("Signature Date", margin + 80, declTop + 15)
 
     doc.setFontSize(8)
     doc.text(String(get("shippername")), margin + 2, declTop + 22)
-    doc.text(signDateStr, margin + 50, declTop + 22)
+    doc.text(signDateStr, margin + 80, declTop + 22)
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
   }
@@ -551,25 +520,6 @@ export default function CommercialInvoiceForm() {
                   {studies.map((study) => (
                     <SelectItem key={study.id} value={study.id}>
                       {study.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Consignee Selector */}
-          {consignees.length > 0 && (
-            <div className="space-y-2">
-              <Label>Seleccionar Consignee</Label>
-              <Select value={selectedConsigneeId} onValueChange={handleConsigneeChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un consignee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {consignees.map((consignee) => (
-                    <SelectItem key={consignee.id} value={consignee.id}>
-                      {consignee.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -655,63 +605,74 @@ export default function CommercialInvoiceForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="protocol">Protocol</Label>
+              <Label htmlFor="protocol">Export References / Protocol</Label>
               <Input
                 id="protocol"
                 name="protocol"
                 value={formData.protocol}
                 onChange={handleChange}
+                placeholder="PR:MDRN0067..."
               />
             </div>
           </div>
 
-          {/* Fixed Values Display */}
-          <div className="grid gap-4 md:grid-cols-2">
+          {/* Marks - FIXED values shown but disabled */}
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label># of Packages (Fijo)</Label>
+              <Label htmlFor="marks">Marks & Numbers</Label>
               <Input
-                value={String(FIXED_PACKAGES)}
+                id="marks"
+                name="marks"
+                value={formData.marks}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label># of Packages</Label>
+              <Input
+                value={FIXED_PACKAGES}
                 disabled
                 className="bg-muted"
               />
             </div>
             <div className="space-y-2">
-              <Label>Weight LBS (Fijo)</Label>
+              <Label>Weight (LBS)</Label>
               <Input
-                value={String(FIXED_WEIGHT)}
+                value={FIXED_WEIGHT}
                 disabled
                 className="bg-muted"
               />
             </div>
           </div>
 
-          {/* Temperature Checkboxes */}
-          <div className="flex gap-6">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="ambientChecked"
-                name="ambientChecked"
-                checked={formData.ambientChecked}
-                onChange={handleCheckboxChange}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="ambientChecked">Ambient</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="dryIceChecked"
-                name="dryIceChecked"
-                checked={formData.dryIceChecked}
-                onChange={handleCheckboxChange}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="dryIceChecked">DRY ICE</Label>
+          {/* Shipment Temperature */}
+          <div className="space-y-2">
+            <Label>Shipment Temperature</Label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="shipmentTemp"
+                  checked={formData.shipmentTemp === "ambient"}
+                  onChange={() => handleTempChange("ambient")}
+                  className="h-4 w-4"
+                />
+                <span>Ambient</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="shipmentTemp"
+                  checked={formData.shipmentTemp === "dryice"}
+                  onChange={() => handleTempChange("dryice")}
+                  className="h-4 w-4"
+                />
+                <span>DRY ICE</span>
+              </label>
             </div>
           </div>
 
-          {/* Samples Table */}
+          {/* Sample Table */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-lg font-semibold">Sample Description</Label>
@@ -721,20 +682,20 @@ export default function CommercialInvoiceForm() {
               </Button>
             </div>
 
-            <div className="rounded-md border">
+            <div className="border rounded-lg overflow-hidden">
               <table className="w-full">
-                <thead className="bg-muted/50">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="p-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
-                    <th className="p-2 text-center text-sm font-medium w-24">QTY</th>
-                    <th className="p-2 text-center text-sm font-medium w-32">ML/gm</th>
-                    <th className="p-2 w-16"></th>
+                    <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
+                    <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
+                    <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
+                    <th className="px-4 py-2 w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {samples.map((sample, index) => (
                     <tr key={index} className="border-t">
-                      <td className="p-2">
+                      <td className="px-4 py-2">
                         <Select
                           value={sample.description}
                           onValueChange={(value) => updateSample(index, "description", value)}
@@ -751,7 +712,7 @@ export default function CommercialInvoiceForm() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="p-2">
+                      <td className="px-4 py-2">
                         <Input
                           type="number"
                           min="0"
@@ -760,17 +721,18 @@ export default function CommercialInvoiceForm() {
                           className="text-center"
                         />
                       </td>
-                      <td className="p-2 text-center font-medium">
+                      <td className="px-4 py-2 text-center font-medium">
                         {calculateMl(sample)}
                       </td>
-                      <td className="p-2">
+                      <td className="px-4 py-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => removeSample(index)}
                           disabled={samples.length === 1}
+                          className="text-red-500 hover:text-red-700"
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>
                     </tr>
@@ -779,44 +741,37 @@ export default function CommercialInvoiceForm() {
               </table>
             </div>
 
-            {/* Totals Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Total QTY</p>
-                  <p className="text-2xl font-bold">{totalQty}</p>
-                </CardContent>
+            {/* Totals */}
+            <div className="grid grid-cols-4 gap-4">
+              <Card className="p-3 text-center">
+                <p className="text-sm text-muted-foreground">Total QTY</p>
+                <p className="text-2xl font-bold">{totalQty}</p>
               </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Total ML/gm</p>
-                  <p className="text-2xl font-bold">{totalMl}</p>
-                </CardContent>
+              <Card className="p-3 text-center">
+                <p className="text-sm text-muted-foreground">Total ML/gm</p>
+                <p className="text-2xl font-bold">{totalMl}</p>
               </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Unit Value (USD)</p>
-                  <p className="text-2xl font-bold">{unitValue.toFixed(2)}</p>
-                </CardContent>
+              <Card className="p-3 text-center">
+                <p className="text-sm text-muted-foreground">Unit Value (USD)</p>
+                <p className="text-2xl font-bold">{unitValue.toFixed(2)}</p>
               </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Total Value (USD)</p>
-                  <p className="text-2xl font-bold">{FIXED_TOTAL_VALUE.toFixed(2)}</p>
-                </CardContent>
+              <Card className="p-3 text-center">
+                <p className="text-sm text-muted-foreground">Total Value (USD)</p>
+                <p className="text-2xl font-bold">{FIXED_TOTAL_VALUE.toFixed(2)}</p>
               </Card>
             </div>
           </div>
 
-          {/* Signature Section */}
+          {/* Signature section */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shippername">Shipper Name</Label>
+              <Label htmlFor="shippername">Shipper Signature / Exporter Name</Label>
               <Input
                 id="shippername"
                 name="shippername"
                 value={formData.shippername}
                 onChange={handleChange}
+                placeholder="Nombre del exportador"
               />
             </div>
             <div className="space-y-2">
@@ -846,8 +801,8 @@ export default function CommercialInvoiceForm() {
             </div>
           </div>
 
-          {/* Generate Button */}
-          <Button onClick={generatePDF} size="lg" className="w-full">
+          {/* Generate PDF Button */}
+          <Button className="w-full" size="lg" onClick={generatePDF}>
             <FileDown className="mr-2 h-5 w-5" />
             Descargar PDF
           </Button>
