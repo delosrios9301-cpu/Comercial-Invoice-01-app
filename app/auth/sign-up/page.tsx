@@ -44,38 +44,33 @@ export default function SignUpPage() {
     setLoading(true)
     setError(null)
 
-    console.log("[v0] Starting sign up for:", email)
-
-    // Use server API to create user (bypasses rate limits)
-    const response = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, fullName, sedeId })
-    })
-
-    const result = await response.json()
-    console.log("[v0] Register API response:", result)
-
-    if (!response.ok) {
-      setError(result.error || "Error al crear usuario")
-      setLoading(false)
-      return
-    }
-
-    // Sign in after successful registration
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+          sede_id: sedeId,
+        },
+      },
     })
 
-    console.log("[v0] Sign in result:", { signInError })
-
-    if (signInError) {
-      setError(signInError.message)
+    if (error) {
+      setError(error.message)
       setLoading(false)
-    } else {
-      router.push("/")
-      router.refresh()
+    } else if (data.user) {
+      // Sign in immediately after signup (no email confirmation needed)
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (signInError) {
+        setError(signInError.message)
+        setLoading(false)
+      } else {
+        router.push("/")
+        router.refresh()
+      }
     }
   }
 
