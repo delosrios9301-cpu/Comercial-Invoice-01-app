@@ -65,6 +65,9 @@ export default function CommercialInvoiceForm() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   
+  // Permission check - admin or can_edit
+  const canEdit = user?.is_admin || user?.can_edit || false
+  
   // Data from database
   const [studies, setStudies] = useState<Study[]>([])
   const [sampleDescriptions, setSampleDescriptions] = useState<string[]>([])
@@ -609,6 +612,8 @@ export default function CommercialInvoiceForm() {
               onChange={handleChange}
               rows={4}
               placeholder="Direccion del remitente..."
+              disabled={!canEdit}
+              className={!canEdit ? "bg-muted" : ""}
             />
           </div>
 
@@ -622,6 +627,8 @@ export default function CommercialInvoiceForm() {
               onChange={handleChange}
               rows={4}
               placeholder="Direccion del destinatario..."
+              disabled={!canEdit}
+              className={!canEdit ? "bg-muted" : ""}
             />
           </div>
 
@@ -634,6 +641,8 @@ export default function CommercialInvoiceForm() {
                 name="destination"
                 value={formData.destination}
                 onChange={handleChange}
+                disabled={!canEdit}
+                className={!canEdit ? "bg-muted" : ""}
               />
             </div>
             <div className="space-y-2">
@@ -644,6 +653,8 @@ export default function CommercialInvoiceForm() {
                 value={formData.protocol}
                 onChange={handleChange}
                 placeholder="PR:MDRN0067..."
+                disabled={!canEdit}
+                className={!canEdit ? "bg-muted" : ""}
               />
             </div>
           </div>
@@ -657,6 +668,8 @@ export default function CommercialInvoiceForm() {
                 name="marks"
                 value={formData.marks}
                 onChange={handleChange}
+                disabled={!canEdit}
+                className={!canEdit ? "bg-muted" : ""}
               />
             </div>
             <div className="space-y-2">
