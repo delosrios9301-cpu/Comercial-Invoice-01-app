@@ -3,12 +3,20 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { jsPDF } from "jspdf"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Calendar } from "@/components/ui/calendar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -16,8 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2, LogOut, Settings } from "lucide-react"
+import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon } from "lucide-react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 const FIXED_TOTAL_VALUE = 5
 const FIXED_PACKAGES = 1
@@ -48,17 +57,8 @@ interface UserProfile {
   sede_id: string
 }
 
-// Meses en espanol para el selector de fecha
-const MONTHS = [
-  "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-  "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"
-]
-
-// Generar dias del 1 al 31
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1)
-
-// Generar anos (2024-2030)
-const YEARS = Array.from({ length: 7 }, (_, i) => 2024 + i)
+// Meses en espanol para el PDF
+const MONTHS = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"]
 
 export default function CommercialInvoiceForm() {
   const router = useRouter()
@@ -77,15 +77,9 @@ export default function CommercialInvoiceForm() {
   const [selectedStudyId, setSelectedStudyId] = useState<string>("")
   const [selectedConsigneeId, setSelectedConsigneeId] = useState<string>("")
   
-  // Date of Exportation state
-  const [exportDay, setExportDay] = useState(new Date().getDate())
-  const [exportMonth, setExportMonth] = useState(MONTHS[new Date().getMonth()])
-  const [exportYear, setExportYear] = useState(new Date().getFullYear())
-  
-  // Signature Date state
-  const [signDay, setSignDay] = useState(new Date().getDate())
-  const [signMonth, setSignMonth] = useState(MONTHS[new Date().getMonth()])
-  const [signYear, setSignYear] = useState(new Date().getFullYear())
+  // Date states with Calendar
+  const [exportDate, setExportDate] = useState<Date>(new Date())
+  const [signDate, setSignDate] = useState<Date>(new Date())
 
   const [formData, setFormData] = useState({
     awb: "",
@@ -178,8 +172,11 @@ export default function CommercialInvoiceForm() {
     fetchUserAndData()
   }, [fetchUserAndData])
 
-  // Format date for display
-  const formatDate = (day: number, month: string, year: number) => {
+  // Format date for PDF (DD MMM YYYY)
+  const formatDateForPDF = (date: Date) => {
+    const day = date.getDate()
+    const month = MONTHS[date.getMonth()]
+    const year = date.getFullYear()
     return `${day} ${month} ${year}`
   }
 
@@ -279,8 +276,8 @@ export default function CommercialInvoiceForm() {
     const get = (field: keyof typeof formData) => formData[field] || ""
     
     // Get formatted dates
-    const exportDate = formatDate(exportDay, exportMonth, exportYear)
-    const signDate = formatDate(signDay, signMonth, signYear)
+    const exportDateStr = formatDateForPDF(exportDate)
+    const signDateStr = formatDateForPDF(signDate)
 
     const selectedStudy = studies.find(s => s.id === selectedStudyId)
 
@@ -293,7 +290,7 @@ export default function CommercialInvoiceForm() {
     doc.text("Air Way Bill No:", margin + contentWidth / 2, 12)
 
     // Date and AWB values
-    doc.text(exportDate, margin, 18)
+    doc.text(exportDateStr, margin, 18)
     doc.text(String(get("awb")), margin + contentWidth / 2, 18)
 
     // Shipper and Consignee boxes
@@ -501,7 +498,7 @@ export default function CommercialInvoiceForm() {
 
     doc.setFontSize(8)
     doc.text(String(get("shippername")), margin + 2, declTop + 22)
-    doc.text(signDate, margin + 50, declTop + 22)
+    doc.text(signDateStr, margin + 50, declTop + 22)
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
   }
@@ -584,38 +581,28 @@ export default function CommercialInvoiceForm() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Date of Exportation</Label>
-              <div className="flex gap-2">
-                <Select value={String(exportDay)} onValueChange={(v) => setExportDay(Number(v))}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((day) => (
-                      <SelectItem key={day} value={String(day)}>{day}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={exportMonth} onValueChange={setExportMonth}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((month) => (
-                      <SelectItem key={month} value={month}>{month}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={String(exportYear)} onValueChange={(v) => setExportYear(Number(v))}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {YEARS.map((year) => (
-                      <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !exportDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {exportDate ? format(exportDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={exportDate}
+                    onSelect={(date) => date && setExportDate(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">
@@ -625,33 +612,35 @@ export default function CommercialInvoiceForm() {
                 name="awb"
                 value={formData.awb}
                 onChange={handleChange}
+                placeholder="M7782877"
               />
             </div>
           </div>
 
-          {/* Shipper and Consignee */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="shipper">Shipper / Exporter</Label>
-              <Textarea
-                id="shipper"
-                name="shipper"
-                value={formData.shipper}
-                onChange={handleChange}
-                className="min-h-[120px] font-mono text-sm"
-              />
-            </div>
+          {/* Shipper */}
+          <div className="space-y-2">
+            <Label htmlFor="shipper">Shipper / Exporter</Label>
+            <Textarea
+              id="shipper"
+              name="shipper"
+              value={formData.shipper}
+              onChange={handleChange}
+              rows={4}
+              placeholder="Direccion del remitente..."
+            />
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="consignee">Consignee</Label>
-              <Textarea
-                id="consignee"
-                name="consignee"
-                value={formData.consignee}
-                onChange={handleChange}
-                className="min-h-[120px] font-mono text-sm"
-              />
-            </div>
+          {/* Consignee */}
+          <div className="space-y-2">
+            <Label htmlFor="consignee">Consignee</Label>
+            <Textarea
+              id="consignee"
+              name="consignee"
+              value={formData.consignee}
+              onChange={handleChange}
+              rows={4}
+              placeholder="Direccion del destinatario..."
+            />
           </div>
 
           {/* Destination and Protocol */}
@@ -665,9 +654,8 @@ export default function CommercialInvoiceForm() {
                 onChange={handleChange}
               />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="protocol">Export References / Protocol</Label>
+              <Label htmlFor="protocol">Protocol</Label>
               <Input
                 id="protocol"
                 name="protocol"
@@ -677,88 +665,79 @@ export default function CommercialInvoiceForm() {
             </div>
           </div>
 
-          {/* Marks - Fixed values shown */}
-          <div className="grid gap-4 md:grid-cols-4">
+          {/* Fixed Values Display */}
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="marks">Marks</Label>
+              <Label># of Packages (Fijo)</Label>
               <Input
-                id="marks"
-                name="marks"
-                value={formData.marks}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label># of Packages</Label>
-              <Input
-                value={FIXED_PACKAGES}
+                value={String(FIXED_PACKAGES)}
                 disabled
                 className="bg-muted"
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Weight (LBS)</Label>
+              <Label>Weight LBS (Fijo)</Label>
               <Input
-                value={FIXED_WEIGHT}
+                value={String(FIXED_WEIGHT)}
                 disabled
                 className="bg-muted"
               />
             </div>
           </div>
 
-          {/* Temperature */}
+          {/* Temperature Checkboxes */}
           <div className="flex gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center gap-2">
               <input
                 type="checkbox"
+                id="ambientChecked"
                 name="ambientChecked"
                 checked={formData.ambientChecked}
                 onChange={handleCheckboxChange}
-                className="w-4 h-4"
+                className="h-4 w-4"
               />
-              <span>Ambient</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+              <Label htmlFor="ambientChecked">Ambient</Label>
+            </div>
+            <div className="flex items-center gap-2">
               <input
                 type="checkbox"
+                id="dryIceChecked"
                 name="dryIceChecked"
                 checked={formData.dryIceChecked}
                 onChange={handleCheckboxChange}
-                className="w-4 h-4"
+                className="h-4 w-4"
               />
-              <span>DRY ICE</span>
-            </label>
+              <Label htmlFor="dryIceChecked">DRY ICE</Label>
+            </div>
           </div>
 
-          {/* Sample Table */}
+          {/* Samples Table */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-lg font-semibold">Sample Description</Label>
               <Button variant="outline" size="sm" onClick={addSample}>
                 <Plus className="mr-1 h-4 w-4" />
-                Add Sample
+                Agregar Muestra
               </Button>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
+            <div className="rounded-md border">
               <table className="w-full">
-                <thead className="bg-muted">
+                <thead className="bg-muted/50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium w-24">QTY</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium w-32">TOTAL ML/gm</th>
-                    <th className="px-4 py-2 w-16"></th>
+                    <th className="p-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
+                    <th className="p-2 text-center text-sm font-medium w-24">QTY</th>
+                    <th className="p-2 text-center text-sm font-medium w-32">ML/gm</th>
+                    <th className="p-2 w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {samples.map((sample, index) => (
                     <tr key={index} className="border-t">
-                      <td className="px-4 py-2">
+                      <td className="p-2">
                         <Select
                           value={sample.description}
-                          onValueChange={(v) => updateSample(index, "description", v)}
+                          onValueChange={(value) => updateSample(index, "description", value)}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -772,27 +751,26 @@ export default function CommercialInvoiceForm() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="p-2">
                         <Input
                           type="number"
                           min="0"
                           value={sample.qty}
                           onChange={(e) => updateSample(index, "qty", e.target.value)}
-                          className="w-20"
+                          className="text-center"
                         />
                       </td>
-                      <td className="px-4 py-2 text-center font-mono">
+                      <td className="p-2 text-center font-medium">
                         {calculateMl(sample)}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="p-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => removeSample(index)}
                           disabled={samples.length === 1}
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </td>
                     </tr>
@@ -804,25 +782,25 @@ export default function CommercialInvoiceForm() {
             {/* Totals Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card>
-                <CardContent className="p-4 text-center">
+                <CardContent className="pt-4">
                   <p className="text-sm text-muted-foreground">Total QTY</p>
                   <p className="text-2xl font-bold">{totalQty}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
+                <CardContent className="pt-4">
                   <p className="text-sm text-muted-foreground">Total ML/gm</p>
                   <p className="text-2xl font-bold">{totalMl}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
+                <CardContent className="pt-4">
                   <p className="text-sm text-muted-foreground">Unit Value (USD)</p>
                   <p className="text-2xl font-bold">{unitValue.toFixed(2)}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
+                <CardContent className="pt-4">
                   <p className="text-sm text-muted-foreground">Total Value (USD)</p>
                   <p className="text-2xl font-bold">{FIXED_TOTAL_VALUE.toFixed(2)}</p>
                 </CardContent>
@@ -841,52 +819,37 @@ export default function CommercialInvoiceForm() {
                 onChange={handleChange}
               />
             </div>
-
             <div className="space-y-2">
               <Label>Signature Date</Label>
-              <div className="flex gap-2">
-                <Select value={String(signDay)} onValueChange={(v) => setSignDay(Number(v))}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((day) => (
-                      <SelectItem key={day} value={String(day)}>{day}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={signMonth} onValueChange={setSignMonth}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((month) => (
-                      <SelectItem key={month} value={month}>{month}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={String(signYear)} onValueChange={(v) => setSignYear(Number(v))}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {YEARS.map((year) => (
-                      <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !signDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {signDate ? format(signDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={signDate}
+                    onSelect={(date) => date && setSignDate(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
           {/* Generate Button */}
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={generatePDF}
-          >
+          <Button onClick={generatePDF} size="lg" className="w-full">
             <FileDown className="mr-2 h-5 w-5" />
-            Download PDF
+            Descargar PDF
           </Button>
         </CardContent>
       </Card>
