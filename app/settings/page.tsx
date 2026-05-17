@@ -87,36 +87,51 @@ export default function SettingsPage() {
       if (profile) {
         setUser(profile)
 
-        // Get user's assigned sedes
-        const { data: userSedesData } = await supabase
+        // Get user's assigned sedes - fetch separately to ensure correct data
+        const { data: userSedesData, error: sedesError } = await supabase
           .from("user_sedes")
-          .select("sede_id, sedes(id, name)")
+          .select("sede_id")
           .eq("user_id", authUser.id)
 
-        const sedes = userSedesData?.map(us => us.sedes as unknown as Sede).filter(Boolean) || []
-        setUserSedes(sedes)
+        console.log("[v0] userSedesData:", userSedesData, "error:", sedesError)
 
-        // Set default selected sede
-        if (sedes.length > 0) {
-          setSelectedSedeId(sedes[0].id)
-        }
+        if (userSedesData && userSedesData.length > 0) {
+          // Get full sede info
+          const sedeIds = userSedesData.map(us => us.sede_id)
+          const { data: sedesInfo } = await supabase
+            .from("sedes")
+            .select("id, name")
+            .in("id", sedeIds)
 
-        // For admin, fetch all data; for regular users, we'll fetch based on selected sede
-        if (profile.is_admin) {
-          const [studiesRes, samplesRes] = await Promise.all([
-            supabase.from("studies").select("*"),
-            supabase.from("sample_descriptions").select("*"),
-          ])
-          if (studiesRes.data) setStudies(studiesRes.data)
-          if (samplesRes.data) setSampleDescriptions(samplesRes.data)
-        } else if (sedes.length > 0) {
-          const sedeIds = sedes.map(s => s.id)
-          const [studiesRes, samplesRes] = await Promise.all([
-            supabase.from("studies").select("*").in("sede_id", sedeIds),
-            supabase.from("sample_descriptions").select("*").in("sede_id", sedeIds),
-          ])
-          if (studiesRes.data) setStudies(studiesRes.data)
-          if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+          console.log("[v0] sedesInfo:", sedesInfo)
+
+          const sedes = sedesInfo || []
+          setUserSedes(sedes)
+
+          // Set default selected sede
+          if (sedes.length > 0) {
+            setSelectedSedeId(sedes[0].id)
+            console.log("[v0] Selected sede:", sedes[0].id, sedes[0].name)
+          }
+
+          // Fetch studies and samples for user's sedes
+          if (profile.is_admin) {
+            const [studiesRes, samplesRes] = await Promise.all([
+              supabase.from("studies").select("*"),
+              supabase.from("sample_descriptions").select("*"),
+            ])
+            if (studiesRes.data) setStudies(studiesRes.data)
+            if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+          } else {
+            const [studiesRes, samplesRes] = await Promise.all([
+              supabase.from("studies").select("*").in("sede_id", sedeIds),
+              supabase.from("sample_descriptions").select("*").in("sede_id", sedeIds),
+            ])
+            console.log("[v0] Studies fetch:", studiesRes)
+            console.log("[v0] Samples fetch:", samplesRes)
+            if (studiesRes.data) setStudies(studiesRes.data)
+            if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+          }
         }
       }
     } catch (error) {
@@ -168,10 +183,18 @@ export default function SettingsPage() {
 
   // Study CRUD operations
   const handleAddStudy = async () => {
-    if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) return
+    if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) {
+      console.log("[v0] Missing required fields for study")
+      return
+    }
     
     const sedeId = selectedSedeId || userSedes[0]?.id
-    if (!sedeId) return
+    if (!sedeId) {
+      console.log("[v0] No sede ID available")
+      return
+    }
+
+    console.log("[v0] Adding study with sedeId:", sedeId)
 
     const { data, error } = await supabase
       .from("studies")
@@ -185,6 +208,8 @@ export default function SettingsPage() {
       .select()
       .single()
 
+    console.log("[v0] Add study result - data:", data, "error:", error)
+
     if (!error && data) {
       setStudies([...studies, data])
       await logAudit("CREATE", "study", data.id, data.name, undefined, {
@@ -195,6 +220,9 @@ export default function SettingsPage() {
       }, `Estudio "${data.name}" creado`)
       setNewStudy({ name: "", protocol: "", shipper_address: "", consignee_address: "" })
       setShowNewStudy(false)
+    } else if (error) {
+      console.log("[v0] Error adding study:", error.message, error.details, error.hint)
+      alert(`Error al guardar: ${error.message}`)
     }
   }
 
@@ -252,10 +280,18 @@ export default function SettingsPage() {
 
   // Sample description CRUD operations
   const handleAddSample = async () => {
-    if (!user || !newSampleDesc.trim()) return
+    if (!user || !newSampleDesc.trim()) {
+      console.log("[v0] Missing required fields for sample")
+      return
+    }
     
     const sedeId = selectedSedeId || userSedes[0]?.id
-    if (!sedeId) return
+    if (!sedeId) {
+      console.log("[v0] No sede ID available for sample")
+      return
+    }
+
+    console.log("[v0] Adding sample with sedeId:", sedeId)
 
     const { data, error } = await supabase
       .from("sample_descriptions")
@@ -266,6 +302,8 @@ export default function SettingsPage() {
       .select()
       .single()
 
+    console.log("[v0] Add sample result - data:", data, "error:", error)
+
     if (!error && data) {
       setSampleDescriptions([...sampleDescriptions, data])
       await logAudit("CREATE", "sample_description", data.id, data.description, undefined, {
@@ -273,6 +311,9 @@ export default function SettingsPage() {
       }, `Descripcion de muestra "${data.description}" creada`)
       setNewSampleDesc("")
       setShowNewSample(false)
+    } else if (error) {
+      console.log("[v0] Error adding sample:", error.message, error.details, error.hint)
+      alert(`Error al guardar: ${error.message}`)
     }
   }
 
@@ -343,24 +384,31 @@ export default function SettingsPage() {
               Gestiona los estudios y descripciones de muestras
             </CardDescription>
             
-            {/* Sede Selector */}
-            {userSedes.length > 1 && (
+            {/* Sede Selector - show even for single sede */}
+            {userSedes.length > 0 && (
               <div className="mt-4 flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
-                <Label className="text-sm">Sede para nuevos registros:</Label>
-                <Select value={selectedSedeId} onValueChange={setSelectedSedeId}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Seleccionar sede" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {userSedes.map((sede) => (
-                      <SelectItem key={sede.id} value={sede.id}>
-                        {sede.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-sm">Sede:</Label>
+                {userSedes.length === 1 ? (
+                  <span className="font-medium">{userSedes[0].name}</span>
+                ) : (
+                  <Select value={selectedSedeId} onValueChange={setSelectedSedeId}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Seleccionar sede" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userSedes.map((sede) => (
+                        <SelectItem key={sede.id} value={sede.id}>
+                          {sede.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+            )}
+            {userSedes.length === 0 && (
+              <p className="mt-4 text-sm text-red-500">No tienes sedes asignadas. Contacta al administrador.</p>
             )}
           </CardHeader>
           <CardContent>
