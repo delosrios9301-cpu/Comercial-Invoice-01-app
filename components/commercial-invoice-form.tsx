@@ -101,7 +101,7 @@ export default function CommercialInvoiceForm() {
         return
       }
 
-      // Get user profile with sede
+      // Get user profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("*")
@@ -112,11 +112,22 @@ export default function CommercialInvoiceForm() {
         setUser(profile)
         setFormData(prev => ({ ...prev, shippername: profile.full_name || "" }))
 
-        // Fetch studies for user's sede
-        const { data: studiesData } = await supabase
-          .from("studies")
-          .select("*")
-          .eq("sede_id", profile.sede_id)
+        // Get user's assigned sedes
+        const { data: userSedes } = await supabase
+          .from("user_sedes")
+          .select("sede_id")
+          .eq("user_id", authUser.id)
+
+        const sedeIds = userSedes?.map(us => us.sede_id) || []
+
+        // If admin, fetch all studies; otherwise fetch from assigned sedes
+        let studiesQuery = supabase.from("studies").select("*")
+        
+        if (!profile.is_admin && sedeIds.length > 0) {
+          studiesQuery = studiesQuery.in("sede_id", sedeIds)
+        }
+
+        const { data: studiesData } = await studiesQuery
 
         if (studiesData && studiesData.length > 0) {
           setStudies(studiesData)
@@ -129,14 +140,17 @@ export default function CommercialInvoiceForm() {
           }))
         }
 
-        // Fetch sample descriptions for user's sede
-        const { data: samplesData } = await supabase
-          .from("sample_descriptions")
-          .select("description")
-          .eq("sede_id", profile.sede_id)
+        // Fetch sample descriptions from assigned sedes
+        let samplesQuery = supabase.from("sample_descriptions").select("description")
+        
+        if (!profile.is_admin && sedeIds.length > 0) {
+          samplesQuery = samplesQuery.in("sede_id", sedeIds)
+        }
+
+        const { data: samplesData } = await samplesQuery
 
         if (samplesData && samplesData.length > 0) {
-          const descriptions = samplesData.map(s => s.description)
+          const descriptions = [...new Set(samplesData.map(s => s.description))]
           setSampleDescriptions(descriptions)
           setSamples([{ description: descriptions[0], qty: 0 }])
         }

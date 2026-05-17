@@ -24,16 +24,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Plus, Trash2, Shield, Edit, Users } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Shield, Edit, Users, Building2 } from "lucide-react"
 import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 
 interface Sede {
   id: string
@@ -46,8 +40,7 @@ interface User {
   full_name: string
   is_admin: boolean
   can_edit: boolean
-  sede_id: string
-  sedes: Sede | null
+  sedes: Sede[]
 }
 
 export default function UsersPage() {
@@ -56,6 +49,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -63,8 +58,13 @@ export default function UsersPage() {
   const [newEmail, setNewEmail] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [newFullName, setNewFullName] = useState("")
-  const [newSedeId, setNewSedeId] = useState("")
+  const [newSedeIds, setNewSedeIds] = useState<string[]>([])
   const [newCanEdit, setNewCanEdit] = useState(false)
+
+  // Edit user form
+  const [editSedeIds, setEditSedeIds] = useState<string[]>([])
+  const [editCanEdit, setEditCanEdit] = useState(false)
+  const [editIsAdmin, setEditIsAdmin] = useState(false)
   
   const router = useRouter()
   const supabase = createClient()
@@ -110,9 +110,25 @@ export default function UsersPage() {
     setSedes(data || [])
   }
 
+  function toggleNewSede(sedeId: string) {
+    setNewSedeIds(prev => 
+      prev.includes(sedeId) 
+        ? prev.filter(id => id !== sedeId)
+        : [...prev, sedeId]
+    )
+  }
+
+  function toggleEditSede(sedeId: string) {
+    setEditSedeIds(prev => 
+      prev.includes(sedeId) 
+        ? prev.filter(id => id !== sedeId)
+        : [...prev, sedeId]
+    )
+  }
+
   async function createUser() {
-    if (!newEmail || !newPassword || !newFullName || !newSedeId) {
-      setError("Todos los campos son requeridos")
+    if (!newEmail || !newPassword || !newFullName || newSedeIds.length === 0) {
+      setError("Todos los campos son requeridos y debe seleccionar al menos una sede")
       return
     }
 
@@ -126,7 +142,7 @@ export default function UsersPage() {
         email: newEmail,
         password: newPassword,
         fullName: newFullName,
-        sedeId: newSedeId,
+        sedeIds: newSedeIds,
         canEdit: newCanEdit,
       }),
     })
@@ -143,23 +159,43 @@ export default function UsersPage() {
     setNewEmail("")
     setNewPassword("")
     setNewFullName("")
-    setNewSedeId("")
+    setNewSedeIds([])
     setNewCanEdit(false)
     setDialogOpen(false)
     setSaving(false)
     await loadUsers()
   }
 
-  async function updateUserPermissions(userId: string, canEdit: boolean, isAdminUser: boolean) {
+  function openEditDialog(user: User) {
+    setEditingUser(user)
+    setEditSedeIds(user.sedes?.map(s => s.id) || [])
+    setEditCanEdit(user.can_edit)
+    setEditIsAdmin(user.is_admin)
+    setEditDialogOpen(true)
+  }
+
+  async function updateUser() {
+    if (!editingUser) return
+
+    setSaving(true)
+
     const response = await fetch("/api/users", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, canEdit, isAdmin: isAdminUser }),
+      body: JSON.stringify({ 
+        userId: editingUser.id, 
+        canEdit: editCanEdit, 
+        isAdmin: editIsAdmin,
+        sedeIds: editSedeIds
+      }),
     })
 
     if (response.ok) {
+      setEditDialogOpen(false)
+      setEditingUser(null)
       await loadUsers()
     }
+    setSaving(false)
   }
 
   async function deleteUser(userId: string) {
@@ -214,7 +250,7 @@ export default function UsersPage() {
                 Nuevo Usuario
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                 <DialogDescription>
@@ -262,19 +298,24 @@ export default function UsersPage() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="sede">Sede</Label>
-                  <Select value={newSedeId} onValueChange={setNewSedeId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar sede" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sedes.map((sede) => (
-                        <SelectItem key={sede.id} value={sede.id}>
+                  <Label>Sedes Asignadas</Label>
+                  <div className="border rounded-md p-3 space-y-2 max-h-40 overflow-y-auto">
+                    {sedes.map((sede) => (
+                      <div key={sede.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`new-sede-${sede.id}`}
+                          checked={newSedeIds.includes(sede.id)}
+                          onCheckedChange={() => toggleNewSede(sede.id)}
+                        />
+                        <Label htmlFor={`new-sede-${sede.id}`} className="cursor-pointer text-sm">
                           {sede.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selecciona una o mas sedes para este usuario
+                  </p>
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -314,7 +355,7 @@ export default function UsersPage() {
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Sede</TableHead>
+                  <TableHead>Sedes</TableHead>
                   <TableHead className="text-center">Admin</TableHead>
                   <TableHead className="text-center">Puede Editar</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -325,32 +366,51 @@ export default function UsersPage() {
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.full_name}</TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.sedes?.name || "Sin sede"}</TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={user.is_admin}
-                        onCheckedChange={(checked) => 
-                          updateUserPermissions(user.id, user.can_edit, checked as boolean)
-                        }
-                      />
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {user.sedes && user.sedes.length > 0 ? (
+                          user.sedes.map((sede) => (
+                            <Badge key={sede.id} variant="secondary" className="text-xs">
+                              {sede.name}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Sin sede</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Checkbox
-                        checked={user.can_edit}
-                        onCheckedChange={(checked) => 
-                          updateUserPermissions(user.id, checked as boolean, user.is_admin)
-                        }
-                      />
+                      {user.is_admin ? (
+                        <Badge className="bg-purple-100 text-purple-700">Si</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">No</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {user.can_edit ? (
+                        <Badge className="bg-blue-100 text-blue-700">Si</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">No</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteUser(user.id)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(user)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteUser(user.id)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -365,6 +425,71 @@ export default function UsersPage() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Edit User Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar Usuario</DialogTitle>
+              <DialogDescription>
+                {editingUser?.full_name} ({editingUser?.email})
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Sedes Asignadas</Label>
+                <div className="border rounded-md p-3 space-y-2 max-h-40 overflow-y-auto">
+                  {sedes.map((sede) => (
+                    <div key={sede.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`edit-sede-${sede.id}`}
+                        checked={editSedeIds.includes(sede.id)}
+                        onCheckedChange={() => toggleEditSede(sede.id)}
+                      />
+                      <Label htmlFor={`edit-sede-${sede.id}`} className="cursor-pointer text-sm">
+                        {sede.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Permisos</Label>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="editIsAdmin"
+                    checked={editIsAdmin}
+                    onCheckedChange={(checked) => setEditIsAdmin(checked as boolean)}
+                  />
+                  <Label htmlFor="editIsAdmin" className="cursor-pointer">
+                    Administrador (acceso total)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="editCanEdit"
+                    checked={editCanEdit}
+                    onCheckedChange={(checked) => setEditCanEdit(checked as boolean)}
+                  />
+                  <Label htmlFor="editCanEdit" className="cursor-pointer">
+                    Puede editar configuraciones
+                  </Label>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={updateUser} disabled={saving}>
+                {saving ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Card>
           <CardHeader>
@@ -386,7 +511,16 @@ export default function UsersPage() {
               <div>
                 <p className="font-medium">Puede Editar</p>
                 <p className="text-sm text-muted-foreground">
-                  Puede crear y modificar estudios, descripciones de muestras y configuraciones de su sede.
+                  Puede crear y modificar estudios, descripciones de muestras y configuraciones de sus sedes asignadas.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
+              <Building2 className="h-5 w-5 text-green-500 mt-0.5" />
+              <div>
+                <p className="font-medium">Multiples Sedes</p>
+                <p className="text-sm text-muted-foreground">
+                  Un usuario puede tener acceso a una o mas sedes. Solo vera los estudios y configuraciones de las sedes asignadas.
                 </p>
               </div>
             </div>
@@ -395,7 +529,7 @@ export default function UsersPage() {
               <div>
                 <p className="font-medium">Usuario Basico</p>
                 <p className="text-sm text-muted-foreground">
-                  Solo puede generar facturas comerciales usando las configuraciones existentes de su sede.
+                  Solo puede generar facturas comerciales usando las configuraciones existentes de sus sedes asignadas.
                 </p>
               </div>
             </div>

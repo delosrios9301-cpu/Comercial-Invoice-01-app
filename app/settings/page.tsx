@@ -10,7 +10,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Plus, Trash2, Edit2, Save, X } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Edit2, Save, X, Building2 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface Study {
   id: string
@@ -27,6 +34,11 @@ interface SampleDescription {
   description: string
 }
 
+interface Sede {
+  id: string
+  name: string
+}
+
 interface UserProfile {
   id: string
   email: string
@@ -41,6 +53,8 @@ export default function SettingsPage() {
   const supabase = createClient()
   
   const [user, setUser] = useState<UserProfile | null>(null)
+  const [userSedes, setUserSedes] = useState<Sede[]>([])
+  const [selectedSedeId, setSelectedSedeId] = useState<string>("")
   const [loading, setLoading] = useState(true)
   
   // Studies state
@@ -73,14 +87,37 @@ export default function SettingsPage() {
       if (profile) {
         setUser(profile)
 
-        // Fetch all data for user's sede
-        const [studiesRes, samplesRes] = await Promise.all([
-          supabase.from("studies").select("*").eq("sede_id", profile.sede_id),
-          supabase.from("sample_descriptions").select("*").eq("sede_id", profile.sede_id),
-        ])
+        // Get user's assigned sedes
+        const { data: userSedesData } = await supabase
+          .from("user_sedes")
+          .select("sede_id, sedes(id, name)")
+          .eq("user_id", authUser.id)
 
-        if (studiesRes.data) setStudies(studiesRes.data)
-        if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+        const sedes = userSedesData?.map(us => us.sedes as unknown as Sede).filter(Boolean) || []
+        setUserSedes(sedes)
+
+        // Set default selected sede
+        if (sedes.length > 0) {
+          setSelectedSedeId(sedes[0].id)
+        }
+
+        // For admin, fetch all data; for regular users, we'll fetch based on selected sede
+        if (profile.is_admin) {
+          const [studiesRes, samplesRes] = await Promise.all([
+            supabase.from("studies").select("*"),
+            supabase.from("sample_descriptions").select("*"),
+          ])
+          if (studiesRes.data) setStudies(studiesRes.data)
+          if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+        } else if (sedes.length > 0) {
+          const sedeIds = sedes.map(s => s.id)
+          const [studiesRes, samplesRes] = await Promise.all([
+            supabase.from("studies").select("*").in("sede_id", sedeIds),
+            supabase.from("sample_descriptions").select("*").in("sede_id", sedeIds),
+          ])
+          if (studiesRes.data) setStudies(studiesRes.data)
+          if (samplesRes.data) setSampleDescriptions(samplesRes.data)
+        }
       }
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -98,11 +135,14 @@ export default function SettingsPage() {
   // Study CRUD operations
   const handleAddStudy = async () => {
     if (!user || !newStudy.name || !newStudy.protocol || !newStudy.shipper_address) return
+    
+    const sedeId = selectedSedeId || userSedes[0]?.id
+    if (!sedeId) return
 
     const { data, error } = await supabase
       .from("studies")
       .insert({
-        sede_id: user.sede_id,
+        sede_id: sedeId,
         name: newStudy.name,
         protocol: newStudy.protocol,
         shipper_address: newStudy.shipper_address,
@@ -147,11 +187,14 @@ export default function SettingsPage() {
   // Sample description CRUD operations
   const handleAddSample = async () => {
     if (!user || !newSampleDesc.trim()) return
+    
+    const sedeId = selectedSedeId || userSedes[0]?.id
+    if (!sedeId) return
 
     const { data, error } = await supabase
       .from("sample_descriptions")
       .insert({
-        sede_id: user.sede_id,
+        sede_id: sedeId,
         description: newSampleDesc.trim().toUpperCase(),
       })
       .select()
@@ -213,8 +256,28 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Configuracion</CardTitle>
             <CardDescription>
-              Gestiona los estudios y descripciones de muestras para tu sede
+              Gestiona los estudios y descripciones de muestras
             </CardDescription>
+            
+            {/* Sede Selector */}
+            {userSedes.length > 1 && (
+              <div className="mt-4 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm">Sede para nuevos registros:</Label>
+                <Select value={selectedSedeId} onValueChange={setSelectedSedeId}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Seleccionar sede" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {userSedes.map((sede) => (
+                      <SelectItem key={sede.id} value={sede.id}>
+                        {sede.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="studies">

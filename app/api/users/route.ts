@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function POST(request: Request) {
-  const { email, password, fullName, sedeId, canEdit } = await request.json()
+  const { email, password, fullName, sedeIds, canEdit } = await request.json()
 
   // First verify the requester is an admin
   const supabaseServer = await createServerClient()
@@ -36,7 +36,6 @@ export async function POST(request: Request) {
     email_confirm: true,
     user_metadata: {
       full_name: fullName,
-      sede_id: sedeId,
     },
   })
 
@@ -50,6 +49,18 @@ export async function POST(request: Request) {
       .from("profiles")
       .update({ can_edit: canEdit })
       .eq("id", newUser.user.id)
+
+    // Insert user_sedes relationships
+    if (sedeIds && sedeIds.length > 0) {
+      const userSedesData = sedeIds.map((sedeId: string) => ({
+        user_id: newUser.user!.id,
+        sede_id: sedeId,
+      }))
+      
+      await supabaseAdmin
+        .from("user_sedes")
+        .insert(userSedesData)
+    }
   }
 
   return NextResponse.json({ success: true, user: newUser.user })
@@ -73,15 +84,32 @@ export async function GET() {
     return NextResponse.json({ error: "Solo administradores" }, { status: 403 })
   }
 
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
   // Get all users with their profiles
-  const { data: profiles, error } = await supabase
+  const { data: profiles, error } = await supabaseAdmin
     .from("profiles")
     .select(`
       id,
       email,
       full_name,
       is_admin,
-      can_edit,
+      can_edit
+    `)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Get user_sedes for each user
+  const { data: userSedes } = await supabaseAdmin
+    .from("user_sedes")
+    .select(`
+      user_id,
       sede_id,
       sedes (
         id,
@@ -89,15 +117,17 @@ export async function GET() {
       )
     `)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  // Map sedes to users
+  const usersWithSedes = profiles?.map(p => ({
+    ...p,
+    sedes: userSedes?.filter(us => us.user_id === p.id).map(us => us.sedes) || []
+  }))
 
-  return NextResponse.json({ users: profiles })
+  return NextResponse.json({ users: usersWithSedes })
 }
 
 export async function PUT(request: Request) {
-  const { userId, canEdit, isAdmin } = await request.json()
+  const { userId, canEdit, isAdmin, sedeIds } = await request.json()
 
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -129,6 +159,27 @@ export async function PUT(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Update user_sedes if provided
+  if (sedeIds !== undefined) {
+    // Delete existing
+    await supabaseAdmin
+      .from("user_sedes")
+      .delete()
+      .eq("user_id", userId)
+
+    // Insert new
+    if (sedeIds.length > 0) {
+      const userSedesData = sedeIds.map((sedeId: string) => ({
+        user_id: userId,
+        sede_id: sedeId,
+      }))
+      
+      await supabaseAdmin
+        .from("user_sedes")
+        .insert(userSedesData)
+    }
   }
 
   return NextResponse.json({ success: true })
