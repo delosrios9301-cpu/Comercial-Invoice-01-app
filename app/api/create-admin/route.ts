@@ -1,46 +1,37 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   const { email, password, fullName, sedeId } = await request.json()
 
-  // Use service role key to bypass RLS and create user properly
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
+  const supabase = await createClient()
 
-  // Create user with admin API
-  const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
+  // Create user with signUp
+  const { data: userData, error: userError } = await supabase.auth.signUp({
     email,
     password,
-    email_confirm: true,
-    user_metadata: {
-      full_name: fullName,
-      sede_id: sedeId
+    options: {
+      data: {
+        full_name: fullName,
+        sede_id: sedeId
+      }
     }
   })
+
+  console.log("[v0] SignUp response:", { userData, userError })
 
   if (userError) {
     return NextResponse.json({ error: userError.message }, { status: 400 })
   }
 
-  // Set user as admin in profiles
+  // Update the profile to set as admin
   if (userData.user) {
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileError } = await supabase
       .from("profiles")
       .update({ is_admin: true })
       .eq("id", userData.user.id)
 
-    if (profileError) {
-      console.log("Profile update error:", profileError)
-    }
+    console.log("[v0] Profile update result:", { profileError })
   }
 
   return NextResponse.json({ success: true, user: userData.user })
