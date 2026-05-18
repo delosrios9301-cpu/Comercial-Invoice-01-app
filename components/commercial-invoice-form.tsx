@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2, History, FilePlus } from "lucide-react"
+import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2, History } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -69,8 +69,7 @@ export default function CommercialInvoiceForm() {
   // Permission check - admin or can_edit
   const canEdit = user?.is_admin || user?.can_edit || false
   
-  // Form mode - false = ready for new invoice, true = filling form
-  const [isFormActive, setIsFormActive] = useState(false)
+
   
   // Data from database
   const [studies, setStudies] = useState<Study[]>([])
@@ -289,24 +288,7 @@ export default function CommercialInvoiceForm() {
     setSamples([{ description: sampleDescriptions[0] || "HUMAN BLOOD", qty: 0 }])
     setExportDate(new Date())
     setSignDate(new Date())
-    setIsFormActive(false)
   }
-
-  // Start new invoice
-  const startNewInvoice = async () => {
-    setIsFormActive(true)
-    await logAudit(
-      "INVOICE_STARTED",
-      "invoice",
-      studies.find(s => s.id === selectedStudyId)?.name || "New Invoice",
-      "Usuario inicio nuevo formulario de factura",
-      undefined,
-      undefined
-    )
-  }
-
-  // Check if form is ready to generate PDF
-  const isFormReady = formData.awb.trim() !== "" && totalQty > 0
 
   const generatePDF = async () => {
     const doc = new jsPDF({
@@ -937,23 +919,11 @@ export default function CommercialInvoiceForm() {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          {!isFormActive ? (
-            <Button className="w-full" size="lg" onClick={startNewInvoice}>
-              <FilePlus className="mr-2 h-5 w-5" />
-              Nuevo Invoice
-            </Button>
-          ) : (
-            <Button 
-              className="w-full" 
-              size="lg" 
-              onClick={generatePDF}
-              disabled={!isFormReady}
-            >
-              <FileDown className="mr-2 h-5 w-5" />
-              {isFormReady ? "Generar PDF" : "Complete los campos requeridos (AWB y Muestras)"}
-            </Button>
-          )}
+          {/* Generate PDF Button */}
+          <Button className="w-full" size="lg" onClick={generatePDF}>
+            <FileDown className="mr-2 h-5 w-5" />
+            Generar PDF
+          </Button>
         </CardContent>
       </Card>
     </div>
