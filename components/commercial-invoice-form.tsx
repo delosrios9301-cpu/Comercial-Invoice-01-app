@@ -18,12 +18,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -75,8 +69,6 @@ export default function CommercialInvoiceForm() {
   // Permission check - admin or can_edit
   const canEdit = user?.is_admin || user?.can_edit || false
   
-
-  
   // Data from database
   const [studies, setStudies] = useState<Study[]>([])
   const [sampleDescriptions, setSampleDescriptions] = useState<string[]>([])
@@ -99,7 +91,9 @@ export default function CommercialInvoiceForm() {
     shipmentTemp: "dryice" as "ambient" | "dryice",
   })
 
-  const [samples, setSamples] = useState<SampleRow[]>([])
+  const [samples, setSamples] = useState<SampleRow[]>([
+    { description: "HUMAN BLOOD", qty: 0 },
+  ])
 
   // Fetch user profile and data
   const fetchUserAndData = useCallback(async () => {
@@ -162,8 +156,7 @@ export default function CommercialInvoiceForm() {
         if (samplesData && samplesData.length > 0) {
           const descriptions = [...new Set(samplesData.map(s => s.description))]
           setSampleDescriptions(descriptions)
-          // Start with empty samples array
-          setSamples([])
+          setSamples([{ description: descriptions[0], qty: 0 }])
         }
       }
     } catch (error) {
@@ -239,12 +232,15 @@ export default function CommercialInvoiceForm() {
     setSamples(newSamples)
   }
 
-  const addSample = (description: string) => {
-    setSamples([...samples, { description, qty: 0 }])
+  const addSample = () => {
+    const defaultDesc = sampleDescriptions[0] || "NEW SAMPLE"
+    setSamples([...samples, { description: defaultDesc, qty: 0 }])
   }
 
   const removeSample = (index: number) => {
-    setSamples(samples.filter((_, i) => i !== index))
+    if (samples.length > 1) {
+      setSamples(samples.filter((_, i) => i !== index))
+    }
   }
 
   const handleLogout = async () => {
@@ -253,57 +249,7 @@ export default function CommercialInvoiceForm() {
     router.refresh()
   }
 
-  // Function to log audit events
-  const logAudit = async (
-    action: string,
-    entityType: string,
-    entityName: string,
-    description: string,
-    oldValue?: Record<string, unknown>,
-    newValue?: Record<string, unknown>
-  ) => {
-    try {
-      await fetch("/api/audit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          entity_type: entityType,
-          entity_name: entityName,
-          description,
-          old_value: oldValue,
-          new_value: newValue,
-        }),
-      })
-    } catch (error) {
-      console.error("Error logging audit:", error)
-    }
-  }
-
-  // Reset form after PDF generation
-  const resetForm = () => {
-    setFormData(prev => ({
-      ...prev,
-      awb: "",
-      marks: "1",
-    }))
-    setSamples([])
-    setExportDate(new Date())
-    setSignDate(new Date())
-  }
-
-  const generatePDF = async () => {
-    // Validate that there are samples before generating
-    if (samples.length === 0) {
-      alert("Por favor agregue al menos una muestra antes de generar el PDF")
-      return
-    }
-
-    if (!formData.awb.trim()) {
-      alert("Por favor ingrese el numero de AWB")
-      return
-    }
-
+  const generatePDF = () => {
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -544,27 +490,6 @@ export default function CommercialInvoiceForm() {
     doc.text(signDateStr, margin + 80, declTop + 22)
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
-
-    // Log audit event
-    await logAudit(
-      "PDF_GENERATED",
-      "invoice",
-      selectedStudy?.name || "Invoice",
-      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras`,
-      undefined,
-      {
-        study: selectedStudy?.name,
-        awb: formData.awb,
-        total_qty: totalQty,
-        total_ml: totalMl,
-        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
-        export_date: exportDateStr,
-        sign_date: signDateStr,
-      }
-    )
-
-    // Reset form for new invoice
-    resetForm()
   }
 
   if (loading) {
@@ -807,90 +732,70 @@ export default function CommercialInvoiceForm() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-lg font-semibold">Sample Description</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Plus className="mr-1 h-4 w-4" />
-                    Agregar Muestra
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {sampleDescriptions.map((desc) => (
-                    <DropdownMenuItem 
-                      key={desc} 
-                      onClick={() => addSample(desc)}
-                    >
-                      {desc}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={addSample}>
+                <Plus className="mr-1 h-4 w-4" />
+                Agregar Muestra
+              </Button>
             </div>
 
-            {samples.length === 0 ? (
-              <div className="border rounded-lg p-8 text-center text-muted-foreground">
-                <p>No hay muestras agregadas</p>
-                <p className="text-sm mt-1">Use el boton &quot;Agregar Muestra&quot; para seleccionar una muestra</p>
-              </div>
-            ) : (
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
-                      <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
-                      <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
-                      <th className="px-4 py-2 w-16"></th>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
+                    <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
+                    <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
+                    <th className="px-4 py-2 w-16"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {samples.map((sample, index) => (
+                    <tr key={index} className="border-t">
+                      <td className="px-4 py-2">
+                        <Select
+                          value={sample.description}
+                          onValueChange={(value) => updateSample(index, "description", value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {sampleDescriptions.map((desc) => (
+                              <SelectItem key={desc} value={desc}>
+                                {desc}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="px-4 py-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={sample.qty}
+                          onChange={(e) => updateSample(index, "qty", e.target.value)}
+                          className="text-center"
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-center font-medium">
+                        {calculateMl(sample)}
+                      </td>
+                      <td className="px-4 py-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeSample(index)}
+                          disabled={samples.length === 1}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {samples.map((sample, index) => (
-                      <tr key={index} className="border-t">
-                        <td className="px-4 py-2">
-                          <Select
-                            value={sample.description}
-                            onValueChange={(value) => updateSample(index, "description", value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {sampleDescriptions.map((desc) => (
-                                <SelectItem key={desc} value={desc}>
-                                  {desc}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            value={sample.qty}
-                            onChange={(e) => updateSample(index, "qty", e.target.value)}
-                            className="text-center"
-                          />
-                        </td>
-                        <td className="px-4 py-2 text-center font-medium">
-                          {calculateMl(sample)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeSample(index)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Totals */}
             <div className="grid grid-cols-4 gap-4">
@@ -955,7 +860,7 @@ export default function CommercialInvoiceForm() {
           {/* Generate PDF Button */}
           <Button className="w-full" size="lg" onClick={generatePDF}>
             <FileDown className="mr-2 h-5 w-5" />
-            Generar PDF
+            Descargar PDF
           </Button>
         </CardContent>
       </Card>
