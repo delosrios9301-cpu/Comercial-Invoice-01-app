@@ -18,6 +18,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -93,9 +99,7 @@ export default function CommercialInvoiceForm() {
     shipmentTemp: "dryice" as "ambient" | "dryice",
   })
 
-  const [samples, setSamples] = useState<SampleRow[]>([
-    { description: "HUMAN BLOOD", qty: 0 },
-  ])
+  const [samples, setSamples] = useState<SampleRow[]>([])
 
   // Fetch user profile and data
   const fetchUserAndData = useCallback(async () => {
@@ -158,7 +162,8 @@ export default function CommercialInvoiceForm() {
         if (samplesData && samplesData.length > 0) {
           const descriptions = [...new Set(samplesData.map(s => s.description))]
           setSampleDescriptions(descriptions)
-          setSamples([{ description: descriptions[0], qty: 0 }])
+          // Start with empty samples array
+          setSamples([])
         }
       }
     } catch (error) {
@@ -234,15 +239,12 @@ export default function CommercialInvoiceForm() {
     setSamples(newSamples)
   }
 
-  const addSample = () => {
-    const defaultDesc = sampleDescriptions[0] || "NEW SAMPLE"
-    setSamples([...samples, { description: defaultDesc, qty: 0 }])
+  const addSample = (description: string) => {
+    setSamples([...samples, { description, qty: 0 }])
   }
 
   const removeSample = (index: number) => {
-    if (samples.length > 1) {
-      setSamples(samples.filter((_, i) => i !== index))
-    }
+    setSamples(samples.filter((_, i) => i !== index))
   }
 
   const handleLogout = async () => {
@@ -285,7 +287,7 @@ export default function CommercialInvoiceForm() {
       awb: "",
       marks: "1",
     }))
-    setSamples([{ description: sampleDescriptions[0] || "HUMAN BLOOD", qty: 0 }])
+    setSamples([])
     setExportDate(new Date())
     setSignDate(new Date())
   }
@@ -794,70 +796,90 @@ export default function CommercialInvoiceForm() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-lg font-semibold">Sample Description</Label>
-              <Button variant="outline" size="sm" onClick={addSample}>
-                <Plus className="mr-1 h-4 w-4" />
-                Agregar Muestra
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Plus className="mr-1 h-4 w-4" />
+                    Agregar Muestra
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {sampleDescriptions.map((desc) => (
+                    <DropdownMenuItem 
+                      key={desc} 
+                      onClick={() => addSample(desc)}
+                    >
+                      {desc}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
-                    <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
-                    <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
-                    <th className="px-4 py-2 w-16"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {samples.map((sample, index) => (
-                    <tr key={index} className="border-t">
-                      <td className="px-4 py-2">
-                        <Select
-                          value={sample.description}
-                          onValueChange={(value) => updateSample(index, "description", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {sampleDescriptions.map((desc) => (
-                              <SelectItem key={desc} value={desc}>
-                                {desc}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-4 py-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={sample.qty}
-                          onChange={(e) => updateSample(index, "qty", e.target.value)}
-                          className="text-center"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-center font-medium">
-                        {calculateMl(sample)}
-                      </td>
-                      <td className="px-4 py-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeSample(index)}
-                          disabled={samples.length === 1}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
+            {samples.length === 0 ? (
+              <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                <p>No hay muestras agregadas</p>
+                <p className="text-sm mt-1">Use el boton &quot;Agregar Muestra&quot; para seleccionar una muestra</p>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
+                      <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
+                      <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
+                      <th className="px-4 py-2 w-16"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {samples.map((sample, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-4 py-2">
+                          <Select
+                            value={sample.description}
+                            onValueChange={(value) => updateSample(index, "description", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sampleDescriptions.map((desc) => (
+                                <SelectItem key={desc} value={desc}>
+                                  {desc}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            value={sample.qty}
+                            onChange={(e) => updateSample(index, "qty", e.target.value)}
+                            className="text-center"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-center font-medium">
+                          {calculateMl(sample)}
+                        </td>
+                        <td className="px-4 py-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSample(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Totals */}
             <div className="grid grid-cols-4 gap-4">
