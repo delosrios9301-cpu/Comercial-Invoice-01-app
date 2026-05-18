@@ -293,6 +293,17 @@ export default function CommercialInvoiceForm() {
   }
 
   const generatePDF = async () => {
+    // Validate that there are samples before generating
+    if (samples.length === 0) {
+      alert("Por favor agregue al menos una muestra antes de generar el PDF")
+      return
+    }
+
+    if (!formData.awb.trim()) {
+      alert("Por favor ingrese el numero de AWB")
+      return
+    }
+
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "mm",
