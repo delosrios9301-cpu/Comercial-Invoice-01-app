@@ -41,8 +41,6 @@ const FIXED_WEIGHT = 20
 interface SampleRow {
   description: string
   qty: number
-  operator: "×" | "÷" | "+"
-  operand: number
 }
 
 interface Study {
@@ -201,16 +199,13 @@ export default function CommercialInvoiceForm() {
     }
   }
 
-  // Calculate ML/gm for a single row using the manual formula
+  // Calculate ML/gm for a single row - SWAB/HISOPADO multiplies by 3
   const calculateMl = (sample: SampleRow): number => {
-    const qty = Number(sample.qty) || 0
-    const operand = Number(sample.operand) || 1
-    switch (sample.operator) {
-      case "×": return qty * operand
-      case "÷": return operand !== 0 ? parseFloat((qty / operand).toFixed(4)) : 0
-      case "+": return qty + operand
-      default:  return qty
+    const name = sample.description.toLowerCase()
+    if (name.includes("nasal") || name.includes("swab") || name.includes("hisopado")) {
+      return sample.qty * 3
     }
+    return sample.qty
   }
 
   // Calculate totals
@@ -236,18 +231,16 @@ export default function CommercialInvoiceForm() {
 
   const updateSample = (index: number, field: keyof SampleRow, value: string | number) => {
     const newSamples = [...samples]
-    if (field === "qty" || field === "operand") {
+    if (field === "qty") {
       newSamples[index][field] = Number(value)
-    } else if (field === "operator") {
-      newSamples[index].operator = value as SampleRow["operator"]
     } else {
-      newSamples[index].description = String(value)
+      newSamples[index][field] = String(value)
     }
     setSamples(newSamples)
   }
 
   const addSample = (description: string) => {
-    setSamples([...samples, { description, qty: 0, operator: "×", operand: 1 }])
+    setSamples([...samples, { description, qty: 0 }])
   }
 
   const removeSample = (index: number) => {
@@ -474,9 +467,8 @@ export default function CommercialInvoiceForm() {
     doc.setFont("courier", "normal")
     samples.forEach((sample) => {
       const mlValue = calculateMl(sample)
-      const formula = `${sample.qty} ${sample.operator} ${sample.operand}`
       doc.text(sample.description, col3 + 2, descY)
-      doc.text(formula, col3 + 50, descY)
+      doc.text(String(sample.qty), col3 + 57, descY)
       doc.text(String(mlValue), col3 + 78, descY)
       descY += 4
     })
@@ -565,12 +557,7 @@ export default function CommercialInvoiceForm() {
         awb: formData.awb,
         total_qty: totalQty,
         total_ml: totalMl,
-        samples: samples.map(s => ({
-          description: s.description,
-          qty: s.qty,
-          formula: `${s.qty} ${s.operator} ${s.operand} = ${calculateMl(s)}`,
-          result_ml: calculateMl(s),
-        })),
+        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
         export_date: exportDateStr,
         sign_date: signDateStr,
       }
@@ -850,18 +837,16 @@ export default function CommercialInvoiceForm() {
                 <table className="w-full">
                   <thead className="bg-muted">
                     <tr>
-                      <th className="px-3 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
-                      <th className="px-3 py-2 text-center text-sm font-medium w-20">QTY</th>
-                      <th className="px-3 py-2 text-center text-sm font-medium w-28" colSpan={3}>FORMULA (ML/gm)</th>
-                      <th className="px-3 py-2 text-center text-sm font-medium w-20">RESULTADO</th>
-                      <th className="px-3 py-2 w-12"></th>
+                      <th className="px-4 py-2 text-left text-sm font-medium">SAMPLE DESCRIPTION</th>
+                      <th className="px-4 py-2 text-center text-sm font-medium w-24">QTY</th>
+                      <th className="px-4 py-2 text-center text-sm font-medium w-32">ML/gm</th>
+                      <th className="px-4 py-2 w-16"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {samples.map((sample, index) => (
                       <tr key={index} className="border-t">
-                        {/* Description */}
-                        <td className="px-3 py-2">
+                        <td className="px-4 py-2">
                           <Select
                             value={sample.description}
                             onValueChange={(value) => updateSample(index, "description", value)}
@@ -878,57 +863,19 @@ export default function CommercialInvoiceForm() {
                             </SelectContent>
                           </Select>
                         </td>
-                        {/* QTY */}
-                        <td className="px-3 py-2">
+                        <td className="px-4 py-2">
                           <Input
                             type="number"
                             min="0"
-                            value={sample.qty === 0 ? "" : sample.qty}
-                            placeholder="0"
+                            value={sample.qty}
                             onChange={(e) => updateSample(index, "qty", e.target.value)}
-                            className="text-center w-full"
+                            className="text-center"
                           />
                         </td>
-                        {/* Operator */}
-                        <td className="px-1 py-2 w-16">
-                          <Select
-                            value={sample.operator}
-                            onValueChange={(v) => updateSample(index, "operator", v)}
-                          >
-                            <SelectTrigger className="text-center font-bold text-base px-2">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="×">× (Multiplicar)</SelectItem>
-                              <SelectItem value="÷">÷ (Dividir)</SelectItem>
-                              <SelectItem value="+">+ (Sumar)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        {/* Operand */}
-                        <td className="px-1 py-2 w-20">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={sample.operand === 1 && sample.operator === "×" ? "" : sample.operand === 0 ? "" : sample.operand}
-                            placeholder={sample.operator === "×" ? "1" : sample.operator === "÷" ? "1" : "0"}
-                            onChange={(e) => updateSample(index, "operand", e.target.value)}
-                            className="text-center w-full"
-                          />
-                        </td>
-                        {/* Preview */}
-                        <td className="px-3 py-2 text-center">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {sample.qty} {sample.operator} {sample.operand}
-                          </span>
-                        </td>
-                        {/* Result */}
-                        <td className="px-3 py-2 text-center font-bold text-primary">
+                        <td className="px-4 py-2 text-center font-medium">
                           {calculateMl(sample)}
                         </td>
-                        {/* Delete */}
-                        <td className="px-2 py-2">
+                        <td className="px-4 py-2">
                           <Button
                             variant="ghost"
                             size="sm"
