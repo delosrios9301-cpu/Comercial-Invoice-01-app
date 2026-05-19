@@ -270,10 +270,15 @@ export default function CommercialInvoiceForm() {
     newValue?: Record<string, unknown>
   ) => {
     try {
-      await fetch("/api/audit", {
+      // Get sede info from selected study
+      const selectedStudy = studies.find(s => s.id === selectedStudyId)
+      
+      const response = await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          sede_id: selectedStudy?.sede_id,
+          sede_name: selectedStudy?.name ? `Estudio: ${selectedStudy.name}` : undefined,
           action,
           entity_type: entityType,
           entity_name: entityName,
@@ -282,8 +287,12 @@ export default function CommercialInvoiceForm() {
           new_value: newValue,
         }),
       })
+      
+      if (!response.ok) {
+        console.error("[v0] Audit log failed:", await response.text())
+      }
     } catch (error) {
-      console.error("Error logging audit:", error)
+      console.error("[v0] Error logging audit:", error)
     }
   }
 
