@@ -1,3 +1,81 @@
+import { createClient } from "@/lib/supabase/server"
+import { NextResponse } from "next/server"
+
+export async function GET(request: Request) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // Verificar permisos
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin, can_view_audit")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin && !profile?.can_view_audit) {
+    return NextResponse.json(
+      { error: "No tienes permiso para ver el historial" },
+      { status: 403 }
+    )
+  }
+
+  const { searchParams } = new URL(request.url)
+
+  const sedeId = searchParams.get("sede_id")
+  const entityType = searchParams.get("entity_type")
+  const limit = parseInt(searchParams.get("limit") || "100")
+
+  let query = supabase
+    .from("audit_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (sedeId) {
+    query = query.eq("sede_id", sedeId)
+  }
+
+  if (entityType) {
+    query = query.eq("entity_type", entityType)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Compatibilidad frontend + sincronización de sede
+  const transformedData = (data || []).map((log) => ({
+    ...log,
+
+    old_value: log.old_data,
+    new_value: log.new_data,
+
+    sede_id: log.sede_id || null,
+
+    // Prioridad:
+    // 1. sede_name guardada en audit_logs
+    // 2. sede dentro de new_data
+    // 3. sede dentro de old_data
+    // 4. texto por defecto
+    sede_name:
+      log.sede_name ||
+      log.new_data?.sede_name ||
+      log.old_data?.sede_name ||
+      "Sin sede",
+  }))
+
+  return NextResponse.json(transformedData)
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
 
@@ -41,11 +119,19 @@ export async function POST(request: Request) {
     )
   }
 
-  // Buscar nombre de la sede real
-  let finalSedeId = sede_id || profile?.sede_id || null
-  let finalSedeName = sede_name || null
+  // Prioridad:
+  // 1. sede enviada manualmente
+  // 2. sede del perfil
+  const finalSedeId = sede_id || profile?.sede_id || null
 
-  // Si existe sede_id obtener nombre desde tabla sedes
+  let finalSedeName =
+    sede_name ||
+    new_value?.sede_name ||
+    old_value?.sede_name ||
+    null
+
+  // Buscar nombre real de sede desde tabla sedes
+  // para que SIEMPRE aparezca en historial y PDFs
   if (finalSedeId && !finalSedeName) {
     const { data: sedeData } = await supabase
       .from("sedes")
@@ -63,7 +149,7 @@ export async function POST(request: Request) {
       user_email: profile?.email || user.email,
       user_name: profile?.full_name || "Usuario",
 
-      // Guardar sede sincronizada
+      // Guardar sede sincronizada automáticamente
       sede_id: finalSedeId,
       sede_name: finalSedeName,
 
