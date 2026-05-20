@@ -3,13 +3,16 @@ import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Check if user can view audit logs
+  // Verificar permisos
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, can_view_audit")
@@ -17,10 +20,14 @@ export async function GET(request: Request) {
     .single()
 
   if (!profile?.is_admin && !profile?.can_view_audit) {
-    return NextResponse.json({ error: "No tienes permiso para ver el historial" }, { status: 403 })
+    return NextResponse.json(
+      { error: "No tienes permiso para ver el historial" },
+      { status: 403 }
+    )
   }
 
   const { searchParams } = new URL(request.url)
+
   const sedeId = searchParams.get("sede_id")
   const entityType = searchParams.get("entity_type")
   const limit = parseInt(searchParams.get("limit") || "100")
@@ -45,11 +52,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Transform old_data/new_data to old_value/new_value for frontend compatibility
-  const transformedData = data?.map(log => ({
+  // Compatibilidad frontend + sincronización de sede
+  const transformedData = (data || []).map((log) => ({
     ...log,
+
     old_value: log.old_data,
     new_value: log.new_data,
+
+    sede_id: log.sede_id || null,
+
+    // Prioridad:
+    // 1. sede_name guardada en audit_logs
+    // 2. sede dentro de new_data
+    // 3. sede dentro de old_data
+    // 4. texto por defecto
+    sede_name:
+      log.sede_name ||
+      log.new_data?.sede_name ||
+      log.old_data?.sede_name ||
+      "Sin sede",
   }))
 
   return NextResponse.json(transformedData)
@@ -57,46 +78,89 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const body = await request.json()
-  const { 
-    sede_id, 
-    sede_name, 
-    action, 
-    entity_type, 
-    entity_id, 
-    entity_name, 
-    old_value, 
-    new_value, 
-    description 
+
+  const {
+    sede_id,
+    sede_name,
+    action,
+    entity_type,
+    entity_id,
+    entity_name,
+    old_value,
+    new_value,
+    description,
   } = body
 
-  // Get user profile for name
-  const { data: profile } = await supabase
+  // Obtener perfil del usuario
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("full_name, email")
+    .select(`
+      full_name,
+      email,
+      sede_id
+    `)
     .eq("id", user.id)
     .single()
+
+  if (profileError) {
+    return NextResponse.json(
+      { error: profileError.message },
+      { status: 500 }
+    )
+  }
+
+  // Prioridad:
+  // 1. sede enviada manualmente
+  // 2. sede del perfil
+  const finalSedeId = sede_id || profile?.sede_id || null
+
+  let finalSedeName =
+    sede_name ||
+    new_value?.sede_name ||
+    old_value?.sede_name ||
+    null
+
+  // Buscar nombre real de sede desde tabla sedes
+  // para que SIEMPRE aparezca en historial y PDFs
+  if (finalSedeId && !finalSedeName) {
+    const { data: sedeData } = await supabase
+      .from("sedes")
+      .select("name")
+      .eq("id", finalSedeId)
+      .single()
+
+    finalSedeName = sedeData?.name || "Sin sede"
+  }
 
   const { data, error } = await supabase
     .from("audit_logs")
     .insert({
       user_id: user.id,
       user_email: profile?.email || user.email,
-      user_name: profile?.full_name,
-      sede_id,
-      sede_name,
+      user_name: profile?.full_name || "Usuario",
+
+      // Guardar sede sincronizada automáticamente
+      sede_id: finalSedeId,
+      sede_name: finalSedeName,
+
       action,
       entity_type,
       entity_id,
       entity_name,
-      old_data: old_value,
-      new_data: new_value,
+
+      old_data: old_value || null,
+      new_data: new_value || null,
+
       description,
     })
     .select()
