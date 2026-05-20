@@ -199,12 +199,24 @@ export default function CommercialInvoiceForm() {
     }
   }
 
-  // Calculate ML/gm for a single row - SWAB/HISOPADO multiplies by 3
+  // Calculate ML/gm for a single row
+  // - SWAB/HISOPADO/NASAL multiplies by 3
+  // - HUMAN SERUM from study VYF04 multiplies by 1.5
   const calculateMl = (sample: SampleRow): number => {
     const name = sample.description.toLowerCase()
+    const selectedStudy = studies.find(s => s.id === selectedStudyId)
+    const studyName = selectedStudy?.name?.toUpperCase() || ""
+    
+    // Check for nasal/swab/hisopado samples - multiply by 3
     if (name.includes("nasal") || name.includes("swab") || name.includes("hisopado")) {
       return sample.qty * 3
     }
+    
+    // Check for Human Serum from VYF04 study - multiply by 1.5
+    if (name.includes("human serum") && studyName.includes("VYF04")) {
+      return sample.qty * 1.5
+    }
+    
     return sample.qty
   }
 
@@ -545,19 +557,26 @@ export default function CommercialInvoiceForm() {
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
 
-    // Log audit event
+    // Log audit event with detailed sample information including multipliers
     await logAudit(
       "PDF_GENERATED",
       "invoice",
       selectedStudy?.name || "Invoice",
-      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras`,
+      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras, Total ML/gm: ${totalMl}`,
       undefined,
       {
         study: selectedStudy?.name,
         awb: formData.awb,
         total_qty: totalQty,
         total_ml: totalMl,
-        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
+        samples: samples.map(s => ({ 
+          description: s.description, 
+          qty: s.qty,
+          calculated_ml: calculateMl(s),
+          multiplier: s.description.toLowerCase().includes("human serum") && selectedStudy?.name?.toUpperCase().includes("VYF04") 
+            ? 1.5 
+            : (s.description.toLowerCase().includes("nasal") || s.description.toLowerCase().includes("swab") || s.description.toLowerCase().includes("hisopado") ? 3 : 1)
+        })),
         export_date: exportDateStr,
         sign_date: signDateStr,
       }

@@ -45,7 +45,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data)
+  // Transform old_data/new_data to old_value/new_value for frontend compatibility
+  const transformedData = data?.map(log => ({
+    ...log,
+    old_value: log.old_data,
+    new_value: log.new_data,
+  }))
+
+  return NextResponse.json(transformedData)
 }
 
 export async function POST(request: Request) {
@@ -88,8 +95,8 @@ export async function POST(request: Request) {
       entity_type,
       entity_id,
       entity_name,
-      old_value,
-      new_value,
+      old_data: old_value,
+      new_data: new_value,
       description,
     })
     .select()
