@@ -141,13 +141,13 @@ export async function POST(request: Request) {
     null
 
   const finalSedeName =
-    sede_name ||
-    (Array.isArray(userSede?.sedes)
-      ? userSede.sedes[0]?.name
-      : userSede?.sedes?.name) ||
-    new_value?.sede_name ||
-    old_value?.sede_name ||
-    "Sin sede"
+  sede_name ??
+  new_value?.sede_name ??
+  old_value?.sede_name ??
+  (Array.isArray(userSede?.Sedes)
+    ? userSede.Sedes.find(Boolean)?.name
+    : userSede?.Sedes?.name) ??
+  "Sin sede"
 
   const { data, error } = await supabase
     .from("audit_logs")
