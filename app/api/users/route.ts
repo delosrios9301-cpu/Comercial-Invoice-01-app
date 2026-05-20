@@ -46,7 +46,11 @@ export async function POST(request: Request) {
   // Update profile with can_edit and can_view_audit permissions
   if (newUser.user) {
     await supabaseAdmin
-      .from("profiles")
+      .update({
+  can_edit: canEdit,
+  can_view_audit: canViewAudit,
+  sede_id: sedeIds && sedeIds.length > 0 ? sedeIds[0] : null,
+})
       .update({ can_edit: canEdit, can_view_audit: canViewAudit })
       .eq("id", newUser.user.id)
 
@@ -149,7 +153,7 @@ export async function PUT(request: Request) {
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+   .update({ can_edit: canEdit, is_admin: isAdmin, can_view_audit: canViewAudit })
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
