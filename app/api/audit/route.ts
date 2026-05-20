@@ -119,21 +119,28 @@ export async function POST(request: Request) {
   }
 
   // Obtener sede REAL del usuario desde user_sedes
-  // Obtener sede directamente del perfil del usuario
-const finalSedeId = profile?.sede_id || sede_id || null
-
-let finalSedeName = null
-
-// Buscar nombre REAL de la sede
-if (finalSedeId) {
-  const { data: sedeData } = await supabase
-    .from("sedes")
-    .select("name")
-    .eq("id", finalSedeId)
+  const { data: userSede } = await supabase
+    .from("user_sedes")
+    .select(`
+      sede_id,
+      sedes (
+        id,
+        name
+      )
+    `)
+    .eq("user_id", user.id)
+    .limit(1)
     .single()
 
-  finalSedeName = sedeData?.name || "Sin sede"
-}
+  // Priorizar:
+  // 1. sede enviada manualmente
+  // 2. sede encontrada en user_sedes
+  const finalSedeId =
+    sede_id ||
+    userSede?.sede_id ||
+    null
+
+  const finalSedeName =
   sede_name ??
   new_value?.sede_name ??
   old_value?.sede_name ??
