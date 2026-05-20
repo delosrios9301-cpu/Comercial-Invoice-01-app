@@ -101,13 +101,12 @@ export async function POST(request: Request) {
     description,
   } = body
 
-  // Obtener perfil del usuario
+  // Obtener perfil usuario
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select(`
       full_name,
-      email,
-      sede_id
+      email
     `)
     .eq("id", user.id)
     .single()
@@ -119,28 +118,36 @@ export async function POST(request: Request) {
     )
   }
 
-  // Prioridad:
-  // 1. sede enviada manualmente
-  // 2. sede del perfil
-  const finalSedeId = sede_id || profile?.sede_id || null
+  // Obtener sede REAL del usuario desde user_sedes
+  const { data: userSede } = await supabase
+    .from("user_sedes")
+    .select(`
+      sede_id,
+      sedes (
+        id,
+        name
+      )
+    `)
+    .eq("user_id", user.id)
+    .limit(1)
+    .single()
 
-  let finalSedeName =
-    sede_name ||
-    new_value?.sede_name ||
-    old_value?.sede_name ||
+  // Priorizar:
+  // 1. sede enviada manualmente
+  // 2. sede encontrada en user_sedes
+  const finalSedeId =
+    sede_id ||
+    userSede?.sede_id ||
     null
 
-  // Buscar nombre real de sede desde tabla sedes
-  // para que SIEMPRE aparezca en historial y PDFs
-  if (finalSedeId && !finalSedeName) {
-    const { data: sedeData } = await supabase
-      .from("sedes")
-      .select("name")
-      .eq("id", finalSedeId)
-      .single()
-
-    finalSedeName = sedeData?.name || "Sin sede"
-  }
+  const finalSedeName =
+    sede_name ||
+    (Array.isArray(userSede?.sedes)
+      ? userSede.sedes[0]?.name
+      : userSede?.sedes?.name) ||
+    new_value?.sede_name ||
+    old_value?.sede_name ||
+    "Sin sede"
 
   const { data, error } = await supabase
     .from("audit_logs")
@@ -149,7 +156,7 @@ export async function POST(request: Request) {
       user_email: profile?.email || user.email,
       user_name: profile?.full_name || "Usuario",
 
-      // Guardar sede sincronizada automáticamente
+      // Guardar sede automáticamente
       sede_id: finalSedeId,
       sede_name: finalSedeName,
 
