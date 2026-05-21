@@ -70,6 +70,8 @@ interface AuditLog {
   entity_name: string | null
   old_value: Record<string, unknown> | null
   new_value: Record<string, unknown> | null
+  old_data?: Record<string, unknown> | null
+  new_data?: Record<string, unknown> | null
   description: string | null
   created_at: string
 }
@@ -176,7 +178,14 @@ export default function AuditPage() {
           table: 'audit_logs',
         },
         (payload) => {
-          const newLog = payload.new as AuditLog
+          const rawLog = payload.new as AuditLog & { old_data?: Record<string, unknown> | null; new_data?: Record<string, unknown> | null }
+          
+          // Transform old_data/new_data to old_value/new_value for consistency
+          const newLog: AuditLog = {
+            ...rawLog,
+            old_value: rawLog.old_data || rawLog.old_value,
+            new_value: rawLog.new_data || rawLog.new_value,
+          }
           
           // Check if it matches current filters
           const matchesSede = selectedSede === "all" || newLog.sede_id === selectedSede
