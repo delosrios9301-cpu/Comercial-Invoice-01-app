@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+// Audit API - handles logging and retrieving audit events
 export async function GET(request: Request) {
   const supabase = await createClient()
   
