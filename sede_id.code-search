@@ -1,0 +1,120 @@
+# Query: sede_id
+# ContextLines: 1
+
+28 results - 8 files
+
+app/api/audit/route.ts:
+  23    const { searchParams } = new URL(request.url)
+  24:   const sedeId = searchParams.get("sede_id")
+  25    const entityType = searchParams.get("entity_type")
+
+  34    if (sedeId) {
+  35:     query = query.eq("sede_id", sedeId)
+  36    }
+
+  67    const { 
+  68:     sede_id, 
+  69      sede_name, 
+
+  91        user_name: profile?.full_name,
+  92:       sede_id,
+  93        sede_name,
+
+app/api/auth/signup/route.ts:
+  25        full_name: fullName,
+  26:       sede_id: sedeId,
+  27      },
+
+  38        is_admin: false,
+  39:       sede_id: sedeId 
+  40      }).eq("id", userData.user.id)
+
+app/api/create-admin/route.ts:
+  53        full_name: "Admin",
+  54:       sede_id: finalSedeId,
+  55      },
+
+  67        full_name: "Admin",
+  68:       sede_id: finalSedeId,
+  69        is_admin: true,
+
+app/api/sedes/route.ts:
+  145      .select("id")
+  146:     .eq("sede_id", id)
+  147      .limit(3)
+
+app/api/users/route.ts:
+   56          user_id: newUser.user!.id,
+   57:         sede_id: sedeId,
+   58        }))
+
+  113        user_id,
+  114:       sede_id,
+  115        sedes (
+
+  176          user_id: userId,
+  177:         sede_id: sedeId,
+  178        }))
+
+app/audit/page.tsx:
+   64    user_name: string | null
+   65:   sede_id: string | null
+   66    sede_name: string | null
+
+  104      if (selectedSede !== "all") {
+  105:       url += `&sede_id=${selectedSede}`
+  106      }
+
+  190            // Check if it matches current filters
+  191:           const matchesSede = selectedSede === "all" || newLog.sede_id === selectedSede
+  192            const matchesType = selectedEntityType === "all" || newLog.entity_type === selectedEntityType
+
+app/settings/page.tsx:
+   23    id: string
+   24:   sede_id: string
+   25    name: string
+
+   32    id: string
+   33:   sede_id: string
+   34    description: string
+
+   45    full_name: string
+   46:   sede_id: string
+   47    is_admin: boolean
+
+  142          body: JSON.stringify({
+  143:           sede_id: selectedSedeId,
+  144            sede_name: sedeName,
+
+  159    // Filter studies and samples by selected sede
+  160:   const filteredStudies = studies.filter(s => s.sede_id === selectedSedeId)
+  161:   const filteredSamples = sampleDescriptions.filter(s => s.sede_id === selectedSedeId)
+  162  
+
+  171        .insert({
+  172:         sede_id: selectedSedeId,
+  173          name: newStudy.name,
+
+  256        .insert({
+  257:         sede_id: selectedSedeId,
+  258          description: newSampleDesc.trim().toUpperCase(),
+
+components/commercial-invoice-form.tsx:
+   58    full_name: string
+   59:   sede_id: string
+   60    is_admin: boolean
+
+  127            .from("user_sedes")
+  128:           .select("sede_id")
+  129            .eq("user_id", authUser.id)
+  130  
+  131:         const sedeIds = userSedes?.map(us => us.sede_id) || []
+  132  
+
+  136          if (!profile.is_admin && sedeIds.length > 0) {
+  137:           studiesQuery = studiesQuery.in("sede_id", sedeIds)
+  138          }
+
+  157          if (!profile.is_admin && sedeIds.length > 0) {
+  158:           samplesQuery = samplesQuery.in("sede_id", sedeIds)
+  159          }
