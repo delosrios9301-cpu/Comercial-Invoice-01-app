@@ -155,7 +155,7 @@ export async function PUT(request: Request) {
 
   const { error } = await supabaseAdmin
     .from("profiles")
-    .({ can_edit: canEdit, is_admin: isAdmin, can_view_audit: canViewAudit })
+    .update({ can_edit: canEdit, is_admin: isAdmin, can_view_audit: canViewAudit })
     .eq("id", userId)
 
   if (error) {
