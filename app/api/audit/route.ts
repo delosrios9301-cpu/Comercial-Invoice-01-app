@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-// Audit API - handles logging and retrieving audit events
 export async function GET(request: Request) {
   const supabase = await createClient()
   
@@ -59,14 +58,14 @@ export async function POST(request: Request) {
 
   const body = await request.json()
   const {
-  action,
-  entity_type,
-  entity_id,
-  entity_name,
-  old_value,
-  new_value,
-  description,
-} = body
+    action,
+    entity_type,
+    entity_id,
+    entity_name,
+    old_value,
+    new_value,
+    description,
+  } = body
 
   // Get user profile for name
   const { data: profile } = await supabase
