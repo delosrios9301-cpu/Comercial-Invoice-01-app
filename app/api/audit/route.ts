@@ -80,6 +80,7 @@ export async function GET(request: Request) {
     )
   }
 
+fix-merge-conflicts
   // Transformar datos
   const transformedData =
     data?.map((log: any) => {
@@ -114,6 +115,9 @@ export async function GET(request: Request) {
     }) || []
 
   return NextResponse.json(transformedData)
+
+  return NextResponse.json(data)
+ main
 }
 
 export async function POST(request: Request) {
@@ -132,6 +136,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
+fix-merge-conflicts
 
   const {
     sede_id,
@@ -144,6 +149,17 @@ export async function POST(request: Request) {
     new_value,
     description,
   } = body
+
+  const {
+  action,
+  entity_type,
+  entity_id,
+  entity_name,
+  old_value,
+  new_value,
+  description,
+} = body
+main
 
   // Obtener perfil del usuario
   const { data: profile } = await supabase
@@ -168,8 +184,10 @@ export async function POST(request: Request) {
   // Insertar log
   const { data, error } = await supabase
     .from("audit_logs")
-    .insert({
+    .insert({sede_id: sedeId,
+sede_name: sedeName,
       user_id: user.id,
+ fix-merge-conflicts
 
       user_email:
         profile?.email || user.email,
@@ -188,14 +206,40 @@ export async function POST(request: Request) {
         userSede?.sedes?.name ||
         "Sin sede",
 
+
+      user_email: profile?.email || user.email,
+      user_name: profile?.full_name,
+      // Obtener sede real del usuario
+const { data: userSede } = await supabase
+  .from("user_sedes")
+  .select(`
+    sede_id,
+    sedes (
+      id,
+      name
+    )
+  `)
+  .eq("user_id", user.id)
+  .single()
+
+const sedeId = userSede?.sede_id || null
+
+const sedeName =
+  (userSede?.sedes as any)?.name || null
+ main
       action,
       entity_type,
       entity_id,
       entity_name,
+ fix-merge-conflicts
 
       old_data: old_value,
       new_data: new_value,
 
+
+      old_value,
+      new_value,
+ main
       description,
     })
     .select()

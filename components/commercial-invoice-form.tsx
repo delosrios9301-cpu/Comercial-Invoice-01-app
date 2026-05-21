@@ -30,10 +30,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2, History, AlertCircle } from "lucide-react"
+import { FileDown, Plus, Trash2, LogOut, Settings, CalendarIcon, Users, Building2, History } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { getMultiplier, getSampleMultiplierInfo } from "@/lib/multipliers"
 
 const FIXED_TOTAL_VALUE = 5
 const FIXED_PACKAGES = 1
@@ -72,10 +71,11 @@ export default function CommercialInvoiceForm() {
   // User and sede state
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [studySelectionWarning, setStudySelectionWarning] = useState<string | null>(null)
   
   // Permission check - admin or can_edit
   const canEdit = user?.is_admin || user?.can_edit || false
+  
+
   
   // Data from database
   const [studies, setStudies] = useState<Study[]>([])
@@ -142,7 +142,6 @@ export default function CommercialInvoiceForm() {
         if (studiesData && studiesData.length > 0) {
           setStudies(studiesData)
           setSelectedStudyId(studiesData[0].id)
-          setStudySelectionWarning(null)
           setFormData(prev => ({
             ...prev,
             shipper: studiesData[0].shipper_address,
@@ -191,32 +190,22 @@ export default function CommercialInvoiceForm() {
     setSelectedStudyId(studyId)
     const study = studies.find(s => s.id === studyId)
     if (study) {
-      setStudySelectionWarning(null)
       setFormData(prev => ({
         ...prev,
         shipper: study.shipper_address,
         consignee: study.consignee_address || "",
         protocol: study.protocol,
       }))
-    } else {
-      const warning = `⚠️ No study found with ID ${studyId}. Multiplier calculations may be incorrect.`
-      console.warn(warning)
-      setStudySelectionWarning(warning)
     }
   }
 
-  // Calculate ML/gm for a single row using centralized configuration
+  // Calculate ML/gm for a single row - SWAB/HISOPADO multiplies by 3
   const calculateMl = (sample: SampleRow): number => {
-    const selectedStudy = studies.find(s => s.id === selectedStudyId)
-    const studyName = selectedStudy?.name || ""
-    
-    if (!studyName) {
-      console.warn("No study selected - using default multiplier of 1")
-      return sample.qty
+    const name = sample.description.toLowerCase()
+    if (name.includes("nasal") || name.includes("swab") || name.includes("hisopado")) {
+      return sample.qty * 3
     }
-    
-    const multiplier = getMultiplier(sample.description, studyName)
-    return sample.qty * multiplier
+    return sample.qty
   }
 
   // Calculate totals
@@ -556,20 +545,19 @@ export default function CommercialInvoiceForm() {
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
 
-    // Log audit event with detailed sample information including multipliers
-    // Using centralized getSampleMultiplierInfo for consistency
+    // Log audit event
     await logAudit(
       "PDF_GENERATED",
       "invoice",
       selectedStudy?.name || "Invoice",
-      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras, Total ML/gm: ${totalMl}`,
+      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras`,
       undefined,
       {
         study: selectedStudy?.name,
         awb: formData.awb,
         total_qty: totalQty,
         total_ml: totalMl,
-        samples: samples.map(s => getSampleMultiplierInfo(s, selectedStudy?.name || "")),
+        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
         export_date: exportDateStr,
         sign_date: signDateStr,
       }
@@ -641,14 +629,6 @@ export default function CommercialInvoiceForm() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Study Selection Warning */}
-          {studySelectionWarning && (
-            <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-md border border-destructive/20">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span className="text-sm">{studySelectionWarning}</span>
-            </div>
-          )}
-
           {/* Study Selector */}
           {studies.length > 0 && (
             <div className="space-y-2">
