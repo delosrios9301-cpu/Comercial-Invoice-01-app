@@ -74,30 +74,30 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single()
 
-  // Get user's sede
-  const { data: userSede } = await supabase
-    .from("user_sedes")
-    .select(`
-      sede_id,
-      sedes (
-        id,
-        name
-      )
-    `)
-    .eq("user_id", user.id)
-    .single()
-
-  const sedeId = userSede?.sede_id || null
-  const sedeName = (userSede?.sedes as { name?: string })?.name || null
-
   const { data, error } = await supabase
     .from("audit_logs")
-    .insert({
-      sede_id: sedeId,
-      sede_name: sedeName,
+    .insert({sede_id: sedeId,
+sede_name: sedeName,
       user_id: user.id,
       user_email: profile?.email || user.email,
       user_name: profile?.full_name,
+      // Obtener sede real del usuario
+const { data: userSede } = await supabase
+  .from("user_sedes")
+  .select(`
+    sede_id,
+    sedes (
+      id,
+      name
+    )
+  `)
+  .eq("user_id", user.id)
+  .single()
+
+const sedeId = userSede?.sede_id || null
+
+const sedeName =
+  (userSede?.sedes as any)?.name || null
       action,
       entity_type,
       entity_id,
