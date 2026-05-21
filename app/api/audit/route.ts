@@ -3,16 +3,13 @@ import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Verificar permisos
+  // Check if user can view audit logs
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, can_view_audit")
@@ -20,14 +17,10 @@ export async function GET(request: Request) {
     .single()
 
   if (!profile?.is_admin && !profile?.can_view_audit) {
-    return NextResponse.json(
-      { error: "No tienes permiso para ver el historial" },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "No tienes permiso para ver el historial" }, { status: 403 })
   }
 
   const { searchParams } = new URL(request.url)
-
   const sedeId = searchParams.get("sede_id")
   const entityType = searchParams.get("entity_type")
   const limit = parseInt(searchParams.get("limit") || "100")
@@ -52,62 +45,36 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Compatibilidad frontend + sincronización de sede
-  const transformedData = (data || []).map((log) => ({
-    ...log,
-    old_value: log.old_data,
-    new_value: log.new_data,
-    sede_id: log.sede_id || null,
-    sede_name:
-      log.sede_name ||
-      log.new_data?.sede_name ||
-      log.old_data?.sede_name ||
-      "Sin sede",
-  }))
-
-  return NextResponse.json(transformedData)
+  return NextResponse.json(data)
 }
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const body = await request.json()
-
   const {
-    sede_id,
-    sede_name,
-    action,
-    entity_type,
-    entity_id,
-    entity_name,
-    old_value,
-    new_value,
-    description,
-  } = body
+  action,
+  entity_type,
+  entity_id,
+  entity_name,
+  old_value,
+  new_value,
+  description,
+} = body
 
-  // Obtener perfil usuario
-  const { data: profile, error: profileError } = await supabase
+  // Get user profile for name
+  const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, email")
     .eq("id", user.id)
     .single()
 
-  if (profileError) {
-    return NextResponse.json(
-      { error: profileError.message },
-      { status: 500 }
-    )
-  }
-
-  // Obtener sede REAL del usuario desde user_sedes
+  // Get user's sede
   const { data: userSede } = await supabase
     .from("user_sedes")
     .select(`
@@ -118,32 +85,25 @@ export async function POST(request: Request) {
       )
     `)
     .eq("user_id", user.id)
-    .limit(1)
     .single()
 
-  // Priorizar: sede enviada manualmente > sede encontrada en user_sedes
-  const finalSedeId = sede_id || userSede?.sede_id || null
-  const finalSedeName =
-    sede_name ||
-    new_value?.sede_name ||
-    old_value?.sede_name ||
-    (userSede?.sedes as { name?: string })?.name ||
-    "Sin sede"
+  const sedeId = userSede?.sede_id || null
+  const sedeName = (userSede?.sedes as { name?: string })?.name || null
 
   const { data, error } = await supabase
     .from("audit_logs")
     .insert({
+      sede_id: sedeId,
+      sede_name: sedeName,
       user_id: user.id,
       user_email: profile?.email || user.email,
-      user_name: profile?.full_name || "Usuario",
-      sede_id: finalSedeId,
-      sede_name: finalSedeName,
+      user_name: profile?.full_name,
       action,
       entity_type,
       entity_id,
       entity_name,
-      old_data: old_value || null,
-      new_data: new_value || null,
+      old_value,
+      new_value,
       description,
     })
     .select()
