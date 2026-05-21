@@ -9,7 +9,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Check if user can view audit logs
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, can_view_audit")
@@ -67,24 +66,17 @@ export async function POST(request: Request) {
     description,
   } = body
 
-  // Get user profile for name
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, email")
     .eq("id", user.id)
     .single()
 
-  // Get user's sede
   const { data: userSede } = await supabase
     .from("user_sedes")
-    .select(`
-      sede_id,
-      sedes (
-        id,
-        name
-      )
-    `)
+    .select("sede_id, sedes(id, name)")
     .eq("user_id", user.id)
+    .limit(1)
     .single()
 
   const sedeId = userSede?.sede_id || null
