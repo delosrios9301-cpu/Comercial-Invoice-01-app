@@ -3,16 +3,13 @@ import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Verificar permisos
+  // Check if user can view audit logs
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_admin, can_view_audit")
@@ -20,14 +17,10 @@ export async function GET(request: Request) {
     .single()
 
   if (!profile?.is_admin && !profile?.can_view_audit) {
-    return NextResponse.json(
-      { error: "No tienes permiso para ver el historial" },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "No tienes permiso para ver el historial" }, { status: 403 })
   }
 
   const { searchParams } = new URL(request.url)
-
   const sedeId = searchParams.get("sede_id")
   const entityType = searchParams.get("entity_type")
   const limit = parseInt(searchParams.get("limit") || "100")
@@ -52,122 +45,65 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Compatibilidad frontend + sincronización de sede
-  const transformedData = (data || []).map((log) => ({
-    ...log,
-
-    old_value: log.old_data,
-    new_value: log.new_data,
-
-    sede_id: log.sede_id || null,
-
-    // Prioridad:
-    // 1. sede_name guardada en audit_logs
-    // 2. sede dentro de new_data
-    // 3. sede dentro de old_data
-    // 4. texto por defecto
-    sede_name:
-      log.sede_name ||
-      log.new_data?.sede_name ||
-      log.old_data?.sede_name ||
-      "Sin sede",
-  }))
-
-  return NextResponse.json(transformedData)
+  return NextResponse.json(data)
 }
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const body = await request.json()
-
   const {
-    sede_id,
-    sede_name,
-    action,
-    entity_type,
-    entity_id,
-    entity_name,
-    old_value,
-    new_value,
-    description,
-  } = body
+  action,
+  entity_type,
+  entity_id,
+  entity_name,
+  old_value,
+  new_value,
+  description,
+} = body
 
-  // Obtener perfil usuario
-  const { data: profile, error: profileError } = await supabase
+  // Get user profile for name
+  const { data: profile } = await supabase
     .from("profiles")
-    .select(`
-      full_name,
-      email
-    `)
+    .select("full_name, email")
     .eq("id", user.id)
     .single()
 
-  if (profileError) {
-    return NextResponse.json(
-      { error: profileError.message },
-      { status: 500 }
-    )
-  }
-
-  // Obtener sede REAL del usuario desde user_sedes
-  const { data: userSede } = await supabase
-    .from("user_sedes")
-    .select(`
-      sede_id,
-      sedes (
-        id,
-        name
-      )
-    `)
-    .eq("user_id", user.id)
-    .limit(1)
-    .single()
-
-  // Priorizar:
-  // 1. sede enviada manualmente
-  // 2. sede encontrada en user_sedes
-  const finalSedeId =
-    sede_id ||
-    userSede?.sede_id ||
-    null
-
-  const finalSedeName =
-  sede_name ??
-  new_value?.sede_name ??
-  old_value?.sede_name ??
-  (Array.isArray(userSede?.Sedes)
-    ? userSede.Sedes.find(Boolean)?.name
-    : userSede?.Sedes?.name) ??
-  "Sin sede"
-
   const { data, error } = await supabase
     .from("audit_logs")
-    .insert({
+    .insert({sede_id: sedeId,
+sede_name: sedeName,
       user_id: user.id,
       user_email: profile?.email || user.email,
-      user_name: profile?.full_name || "Usuario",
+      user_name: profile?.full_name,
+      // Obtener sede real del usuario
+const { data: userSede } = await supabase
+  .from("user_sedes")
+  .select(`
+    sede_id,
+    sedes (
+      id,
+      name
+    )
+  `)
+  .eq("user_id", user.id)
+  .single()
 
-      // Guardar sede automáticamente
-      sede_id: finalSedeId,
-      sede_name: finalSedeName,
+const sedeId = userSede?.sede_id || null
 
+const sedeName =
+  (userSede?.sedes as any)?.name || null
       action,
       entity_type,
       entity_id,
       entity_name,
-
-      old_data: old_value || null,
-      new_data: new_value || null,
-
+      old_value,
+      new_value,
       description,
     })
     .select()
