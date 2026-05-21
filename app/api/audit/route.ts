@@ -57,17 +57,15 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { 
-    sede_id, 
-    sede_name, 
-    action, 
-    entity_type, 
-    entity_id, 
-    entity_name, 
-    old_value, 
-    new_value, 
-    description 
-  } = body
+  const {
+  action,
+  entity_type,
+  entity_id,
+  entity_name,
+  old_value,
+  new_value,
+  description,
+} = body
 
   // Get user profile for name
   const { data: profile } = await supabase
@@ -78,12 +76,28 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("audit_logs")
-    .insert({
+    .insert({sede_id: sedeId,
+sede_name: sedeName,
       user_id: user.id,
       user_email: profile?.email || user.email,
       user_name: profile?.full_name,
-      sede_id,
-      sede_name,
+      // Obtener sede real del usuario
+const { data: userSede } = await supabase
+  .from("user_sedes")
+  .select(`
+    sede_id,
+    sedes (
+      id,
+      name
+    )
+  `)
+  .eq("user_id", user.id)
+  .single()
+
+const sedeId = userSede?.sede_id || null
+
+const sedeName =
+  (userSede?.sedes as any)?.name || null
       action,
       entity_type,
       entity_id,
