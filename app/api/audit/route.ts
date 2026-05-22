@@ -34,9 +34,7 @@ export async function GET(request: Request) {
 
   const sedeId = searchParams.get("sede_id")
   const entityType = searchParams.get("entity_type")
-  const limit = parseInt(
-    searchParams.get("limit") || "100"
-  )
+  const limit = parseInt(searchParams.get("limit") || "100")
 
   // Consulta con relaciones
   let query = supabase
@@ -56,9 +54,7 @@ export async function GET(request: Request) {
         )
       )
     `)
-    .order("created_at", {
-      ascending: false,
-    })
+    .order("created_at", { ascending: false })
     .limit(limit)
 
   // Filtro por sede
@@ -80,44 +76,29 @@ export async function GET(request: Request) {
     )
   }
 
-fix-merge-conflicts
   // Transformar datos
   const transformedData =
     data?.map((log: any) => {
-      const userSede =
-        log.profiles?.user_sedes?.[0]
+      const userSede = log.profiles?.user_sedes?.[0]
 
       return {
         ...log,
-
         // Compatibilidad frontend
-        old_value: log.old_data,
-        new_value: log.new_data,
-
+        old_value: log.old_data || log.old_value,
+        new_value: log.new_data || log.new_value,
         // Usuario
         user_name:
           log.user_name ||
           log.profiles?.full_name ||
           log.profiles?.email ||
           "Usuario",
-
         // Sede
-        sede_id:
-          log.sede_id ||
-          userSede?.sedes?.id ||
-          null,
-
-        sede_name:
-          log.sede_name ||
-          userSede?.sedes?.name ||
-          "Sin sede",
+        sede_id: log.sede_id || userSede?.sedes?.id || null,
+        sede_name: log.sede_name || userSede?.sedes?.name || "Sin sede",
       }
     }) || []
 
   return NextResponse.json(transformedData)
-
-  return NextResponse.json(data)
- main
 }
 
 export async function POST(request: Request) {
@@ -136,7 +117,6 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-fix-merge-conflicts
 
   const {
     sede_id,
@@ -149,17 +129,6 @@ fix-merge-conflicts
     new_value,
     description,
   } = body
-
-  const {
-  action,
-  entity_type,
-  entity_id,
-  entity_name,
-  old_value,
-  new_value,
-  description,
-} = body
-main
 
   // Obtener perfil del usuario
   const { data: profile } = await supabase
@@ -178,68 +147,23 @@ main
     .eq("id", user.id)
     .single()
 
-  const userSede =
-    profile?.user_sedes?.[0]
+  const userSede = profile?.user_sedes?.[0]
 
   // Insertar log
   const { data, error } = await supabase
     .from("audit_logs")
-    .insert({sede_id: sedeId,
-sede_name: sedeName,
+    .insert({
       user_id: user.id,
- fix-merge-conflicts
-
-      user_email:
-        profile?.email || user.email,
-
-      user_name:
-        profile?.full_name ||
-        user.email,
-
-      sede_id:
-        sede_id ||
-        userSede?.sedes?.id ||
-        null,
-
-      sede_name:
-        sede_name ||
-        userSede?.sedes?.name ||
-        "Sin sede",
-
-
       user_email: profile?.email || user.email,
-      user_name: profile?.full_name,
-      // Obtener sede real del usuario
-const { data: userSede } = await supabase
-  .from("user_sedes")
-  .select(`
-    sede_id,
-    sedes (
-      id,
-      name
-    )
-  `)
-  .eq("user_id", user.id)
-  .single()
-
-const sedeId = userSede?.sede_id || null
-
-const sedeName =
-  (userSede?.sedes as any)?.name || null
- main
+      user_name: profile?.full_name || user.email,
+      sede_id: sede_id || (userSede?.sedes as any)?.id || null,
+      sede_name: sede_name || (userSede?.sedes as any)?.name || "Sin sede",
       action,
       entity_type,
       entity_id,
       entity_name,
- fix-merge-conflicts
-
       old_data: old_value,
       new_data: new_value,
-
-
-      old_value,
-      new_value,
- main
       description,
     })
     .select()
@@ -253,4 +177,86 @@ const sedeName =
   }
 
   return NextResponse.json(data)
+}
+
+export async function DELETE(request: Request) {
+  const supabase = await createClient()
+
+  // Usuario autenticado
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    )
+  }
+
+  // Solo admin puede reiniciar el historial
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return NextResponse.json(
+      { error: "Solo el administrador puede reiniciar el historial" },
+      { status: 403 }
+    )
+  }
+
+  // Obtener perfil completo para el log
+  const { data: fullProfile } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .eq("id", user.id)
+    .single()
+
+  // Contar registros antes de eliminar
+  const { count: totalRecords } = await supabase
+    .from("audit_logs")
+    .select("*", { count: "exact", head: true })
+
+  // Eliminar todos los registros de audit_logs
+  const { error: deleteError } = await supabase
+    .from("audit_logs")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000") // Truco para eliminar todos
+
+  if (deleteError) {
+    return NextResponse.json(
+      { error: deleteError.message },
+      { status: 500 }
+    )
+  }
+
+  // Registrar la accion de reinicio como nuevo primer registro
+  const { error: logError } = await supabase
+    .from("audit_logs")
+    .insert({
+      user_id: user.id,
+      user_email: fullProfile?.email || user.email,
+      user_name: fullProfile?.full_name || user.email,
+      sede_id: null,
+      sede_name: "Sistema",
+      action: "RESET",
+      entity_type: "audit_log",
+      entity_id: null,
+      entity_name: "Historial de Cambios",
+      old_data: { total_records: totalRecords },
+      new_data: { total_records: 0 },
+      description: `Historial reiniciado. Se eliminaron ${totalRecords || 0} registros.`,
+    })
+
+  if (logError) {
+    console.error("Error logging reset action:", logError)
+  }
+
+  return NextResponse.json({ 
+    success: true, 
+    message: `Historial reiniciado. Se eliminaron ${totalRecords || 0} registros.` 
+  })
 }
