@@ -187,7 +187,6 @@ main
     .insert({sede_id: sedeId,
 sede_name: sedeName,
       user_id: user.id,
- fix-merge-conflicts
 
       user_email:
         profile?.email || user.email,
