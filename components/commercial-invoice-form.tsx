@@ -96,7 +96,7 @@ export default function CommercialInvoiceForm() {
     protocol: "",
     marks: "1",
     shippername: "",
-    shipmentTemp: "dryice" as "ambient" | "dryice",
+    shipmentTemp: "dryice" as "ambient" | "dryice" | "refrigerated",
   })
 
   const [samples, setSamples] = useState<SampleRow[]>([])
@@ -222,7 +222,7 @@ export default function CommercialInvoiceForm() {
     })
   }
 
-  const handleTempChange = (value: "ambient" | "dryice") => {
+  const handleTempChange = (value: "ambient" | "dryice" | "refrigerated") => {
     setFormData({
       ...formData,
       shipmentTemp: value,
@@ -439,6 +439,7 @@ export default function CommercialInvoiceForm() {
 
     const ambientX = col3 + 2
     const dryIceX = col3 + 35
+    const refrigeratedX = col3 + 65
 
     doc.text("Ambient", ambientX, descY)
     doc.rect(ambientX + 18, descY - 3, 4, 4)
@@ -450,6 +451,12 @@ export default function CommercialInvoiceForm() {
     doc.rect(dryIceX + 18, descY - 3, 4, 4)
     if (formData.shipmentTemp === "dryice") {
       doc.text("X", dryIceX + 19, descY)
+    }
+
+    doc.text("REFRIGERATED", refrigeratedX, descY)
+    doc.rect(refrigeratedX + 30, descY - 3, 4, 4)
+    if (formData.shipmentTemp === "refrigerated") {
+      doc.text("X", refrigeratedX + 31, descY)
     }
 
     descY += 6
@@ -799,6 +806,16 @@ export default function CommercialInvoiceForm() {
                   className="h-4 w-4"
                 />
                 <span>DRY ICE</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="shipmentTemp"
+                  checked={formData.shipmentTemp === "refrigerated"}
+                  onChange={() => handleTempChange("refrigerated")}
+                  className="h-4 w-4"
+                />
+                <span>REFRIGERATED</span>
               </label>
             </div>
           </div>
