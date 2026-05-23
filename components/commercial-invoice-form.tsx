@@ -216,12 +216,17 @@ export default function CommercialInvoiceForm() {
 
   // Calculate ML/gm for a single row
   // SWAB/HISOPADO multiplies by 3
-  // VYF04 multiplies by 1.5
+  // VYF04 or Human Serum with VYF04 multiplies by 1.5
   const calculateMl = (sample: SampleRow): number => {
     const name = sample.description.toLowerCase()
     
-    // Check for VYF04 first
+    // Check for VYF04 first (including Human Serum for VYF04)
     if (name.includes("vyf04")) {
+      return sample.qty * VYF04_MULTIPLIER
+    }
+    
+    // Check for Human Serum - if it's for VYF04 study, it should be multiplied by 1.5
+    if (name.includes("human serum")) {
       return sample.qty * VYF04_MULTIPLIER
     }
     
