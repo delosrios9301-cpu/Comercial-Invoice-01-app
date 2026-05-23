@@ -33,7 +33,8 @@ import {
   FlaskConical,
   TrendingUp,
   Clock,
-  Eye
+  Eye,
+  Trash2
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -43,6 +44,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   BarChart,
   Bar,
@@ -79,6 +89,14 @@ interface Sede {
   name: string
 }
 
+interface UserProfile {
+  id: string
+  email: string
+  full_name: string
+  is_admin: boolean
+  can_view_audit: boolean
+}
+
 const COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899']
 
 export default function AuditPage() {
@@ -89,8 +107,11 @@ export default function AuditPage() {
   const [sedes, setSedes] = useState<Sede[]>([])
   const [loading, setLoading] = useState(true)
   const [hasPermission, setHasPermission] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
+  const [showResetDialog, setShowResetDialog] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   
   // Filters
   const [selectedSede, setSelectedSede] = useState<string>("all")
@@ -137,6 +158,7 @@ export default function AuditPage() {
       }
 
       setHasPermission(true)
+      setIsAdmin(profile?.is_admin || false)
 
       // Fetch sedes for filter
       const { data: sedesData } = await supabase.from("sedes").select("id, name")
@@ -199,6 +221,37 @@ export default function AuditPage() {
     setIsRefreshing(true)
     await fetchLogs()
     setIsRefreshing(false)
+  }
+
+  // Reset audit logs (admin only)
+  const handleResetAuditLogs = async () => {
+    setIsResetting(true)
+    try {
+      const res = await fetch("/api/audit", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      })
+      
+      if (res.ok) {
+        setLogs([])
+        setShowResetDialog(false)
+        // Log the reset action
+        await fetch("/api/audit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "RESET",
+            entity_type: "audit_logs",
+            entity_name: "Historial de Auditoría",
+            description: "Contador del historial detallado reiniciado",
+          }),
+        })
+      }
+    } catch (error) {
+      console.error("Error resetting audit logs:", error)
+    } finally {
+      setIsResetting(false)
+    }
   }
 
   // Calculate statistics
@@ -275,6 +328,8 @@ export default function AuditPage() {
         return <Badge className="bg-cyan-500 hover:bg-cyan-600">Ingreso</Badge>
       case "LOGOUT":
         return <Badge className="bg-gray-500 hover:bg-gray-600">Salida</Badge>
+      case "RESET":
+        return <Badge className="bg-orange-500 hover:bg-orange-600">Reiniciar</Badge>
       default:
         return <Badge>{action}</Badge>
     }
@@ -292,6 +347,8 @@ export default function AuditPage() {
         return "Sede"
       case "invoice":
         return "Factura"
+      case "audit_logs":
+        return "Historial"
       default:
         return type
     }
@@ -497,15 +554,28 @@ export default function AuditPage() {
                 <History className="h-6 w-6" />
                 <CardTitle className="text-2xl">Historial Detallado</CardTitle>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                Actualizar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  Actualizar
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowResetDialog(true)}
+                    disabled={isResetting}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Reiniciar Historial
+                  </Button>
+                )}
+              </div>
             </div>
             <CardDescription>
               Registro detallado de todas las acciones - Haz clic en una fila para ver detalles
@@ -703,6 +773,31 @@ export default function AuditPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Reset Confirmation Dialog */}
+        <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Reiniciar el historial detallado?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta acción eliminará todos los registros del historial de auditoría. Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
+              ⚠️ Advertencia: Se eliminarán permanentemente todos los {logs.length} registros del historial.
+            </div>
+            <div className="flex justify-end gap-3">
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleResetAuditLogs}
+                disabled={isResetting}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                {isResetting ? "Reiniciando..." : "Reiniciar Historial"}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
