@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils"
 const FIXED_TOTAL_VALUE = 5
 const FIXED_PACKAGES = 1
 const FIXED_WEIGHT = 20
+const VYF04_MULTIPLIER = 1.5
 
 interface SampleRow {
   description: string
@@ -71,6 +72,7 @@ export default function CommercialInvoiceForm() {
   // User and sede state
   const [user, setUser] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [userSedeName, setUserSedeName] = useState<string>("")
   
   // Permission check - admin or can_edit
   const canEdit = user?.is_admin || user?.can_edit || false
@@ -121,6 +123,19 @@ export default function CommercialInvoiceForm() {
       if (profile) {
         setUser(profile)
         setFormData(prev => ({ ...prev, shippername: profile.full_name || "" }))
+
+        // Get user's sede name
+        if (profile.sede_id) {
+          const { data: sedeData } = await supabase
+            .from("sedes")
+            .select("name")
+            .eq("id", profile.sede_id)
+            .single()
+          
+          if (sedeData) {
+            setUserSedeName(sedeData.name)
+          }
+        }
 
         // Get user's assigned sedes
         const { data: userSedes } = await supabase
@@ -199,12 +214,22 @@ export default function CommercialInvoiceForm() {
     }
   }
 
-  // Calculate ML/gm for a single row - SWAB/HISOPADO multiplies by 3
+  // Calculate ML/gm for a single row
+  // SWAB/HISOPADO multiplies by 3
+  // VYF04 multiplies by 1.5
   const calculateMl = (sample: SampleRow): number => {
     const name = sample.description.toLowerCase()
+    
+    // Check for VYF04 first
+    if (name.includes("vyf04")) {
+      return sample.qty * VYF04_MULTIPLIER
+    }
+    
+    // Then check for SWAB/HISOPADO
     if (name.includes("nasal") || name.includes("swab") || name.includes("hisopado")) {
       return sample.qty * 3
     }
+    
     return sample.qty
   }
 
@@ -552,19 +577,24 @@ export default function CommercialInvoiceForm() {
 
     doc.save(`Commercial_Invoice_${selectedStudy?.name || "Invoice"}.pdf`)
 
-    // Log audit event
+    // Log audit event with user's sede information
     await logAudit(
       "PDF_GENERATED",
       "invoice",
       selectedStudy?.name || "Invoice",
-      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras`,
+      `PDF generado para estudio "${selectedStudy?.name}" con AWB: ${formData.awb}, ${totalQty} muestras - Sede: ${userSedeName}`,
       undefined,
       {
         study: selectedStudy?.name,
         awb: formData.awb,
         total_qty: totalQty,
         total_ml: totalMl,
-        samples: samples.map(s => ({ description: s.description, qty: s.qty })),
+        user_sede: userSedeName,
+        samples: samples.map(s => ({ 
+          description: s.description, 
+          qty: s.qty,
+          ml_gm: calculateMl(s)
+        })),
         export_date: exportDateStr,
         sign_date: signDateStr,
       }
@@ -594,6 +624,11 @@ export default function CommercialInvoiceForm() {
               <p className="text-muted-foreground">
                 {user?.full_name} - {user?.email}
               </p>
+              {userSedeName && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Sede: <span className="font-medium">{userSedeName}</span>
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               {user?.is_admin && (
