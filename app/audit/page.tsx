@@ -578,7 +578,7 @@ export default function AuditPage() {
               </div>
             </div>
             <CardDescription>
-              Registro detallado de todas las acciones - Haz clic en una fila para ver detalles
+              Registro detallado de todas las acciones - Haz clic en una fila para ver detalles completos incluyendo usuario, sede y datos de muestras
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -665,7 +665,13 @@ export default function AuditPage() {
                             <div className="text-xs text-muted-foreground">{log.user_email}</div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm">{log.sede_name || "-"}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {log.sede_name ? (
+                            <Badge variant="outline" className="bg-blue-50">{log.sede_name}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>{getActionBadge(log.action)}</TableCell>
                         <TableCell className="text-sm">{getEntityTypeName(log.entity_type)}</TableCell>
                         <TableCell className="max-w-[120px] truncate text-sm">
@@ -716,7 +722,15 @@ export default function AuditPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">Sede</Label>
-                    <p className="font-medium">{selectedLog.sede_name || "Sin sede"}</p>
+                    <p className="font-medium">
+                      {selectedLog.sede_name ? (
+                        <Badge variant="outline" className="bg-blue-100">
+                          {selectedLog.sede_name}
+                        </Badge>
+                      ) : (
+                        "Sin sede"
+                      )}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">Tipo</Label>
@@ -727,32 +741,38 @@ export default function AuditPage() {
                 {selectedLog.description && (
                   <div className="space-y-1">
                     <Label className="text-muted-foreground">Descripcion</Label>
-                    <p className="font-medium bg-muted p-3 rounded-lg">{selectedLog.description}</p>
+                    <p className="font-medium bg-muted p-3 rounded-lg text-sm">{selectedLog.description}</p>
                   </div>
                 )}
 
                 {selectedLog.new_value && (
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">Datos del Registro</Label>
-                    <div className="bg-muted p-4 rounded-lg space-y-2">
+                    <Label className="text-muted-foreground font-bold">Datos del Registro</Label>
+                    <div className="bg-muted p-4 rounded-lg space-y-3">
                       {Object.entries(selectedLog.new_value).map(([key, value]) => (
-                        <div key={key} className="flex justify-between items-start border-b border-border/50 pb-2 last:border-0">
-                          <span className="text-sm font-medium text-muted-foreground capitalize">
-                            {key.replace(/_/g, ' ')}:
-                          </span>
-                          <span className="text-sm text-right max-w-[60%]">
+                        <div key={key} className="border-b border-border/50 pb-3 last:border-0">
+                          <div className="flex justify-between items-start">
+                            <span className="text-sm font-semibold text-muted-foreground capitalize">
+                              {key.replace(/_/g, ' ')}:
+                            </span>
+                          </div>
+                          <div className="mt-1 text-sm">
                             {Array.isArray(value) ? (
-                              <div className="space-y-1">
+                              <div className="space-y-2 mt-2">
                                 {value.map((item, i) => (
-                                  <div key={i} className="text-xs bg-background p-1 rounded">
-                                    {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                                  <div key={i} className="text-xs bg-background p-2 rounded border border-border/50">
+                                    {typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item)}
                                   </div>
                                 ))}
                               </div>
+                            ) : typeof value === 'object' && value !== null ? (
+                              <div className="mt-2 bg-background p-3 rounded text-xs whitespace-pre-wrap font-mono">
+                                {JSON.stringify(value, null, 2)}
+                              </div>
                             ) : (
-                              renderDetailValue(value)
+                              <p className="text-foreground font-medium">{renderDetailValue(value)}</p>
                             )}
-                          </span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -762,8 +782,8 @@ export default function AuditPage() {
                 {selectedLog.old_value && (
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Valor Anterior</Label>
-                    <div className="bg-red-50 p-4 rounded-lg">
-                      <pre className="text-xs overflow-auto">
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                      <pre className="text-xs overflow-auto text-red-900">
                         {JSON.stringify(selectedLog.old_value, null, 2)}
                       </pre>
                     </div>
